@@ -1,0 +1,29 @@
+{
+  "name": "fishner-bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Личный Telegram-журнал рыбалок",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/src/index.js",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test test/*.test.ts"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "dotenv": "18.0.6",
+    "grammy": "1.46.0",
+    "pg": "8.16.3"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.4",
+    "@types/pg": "8.15.5",
+    "pg-mem": "3.0.5",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2"
+  }
+}

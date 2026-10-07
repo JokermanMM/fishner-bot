@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: fishner-bot
+    runtime: node
+    plan: free
+    region: frankfurt
+    branch: main
+    autoDeployTrigger: off
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    maxShutdownDelaySeconds: 30
+    envVars:
+      - key: NODE_VERSION
+        value: 24
+      - key: NODE_ENV
+        value: production
+      - key: BOT_MODE
+        value: webhook
+      - key: TIME_ZONE
+        value: Europe/Moscow
+      - key: BOT_TOKEN
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: FRIEND_INVITE_CODE
+        sync: false
+      - key: WEBHOOK_SECRET
+        sync: false
