@@ -48,6 +48,13 @@ GitHub Actions ◄── GitHub repository
 - Локальный диск Render временный, поэтому база находится в Neon Postgres.
 - GitHub Actions проверяет типы, тесты и сборку, затем вызывает секретный Render Deploy Hook.
 
+## Текущий продакшен
+
+- Render Web Service: `https://fishner-bot.onrender.com`.
+- Проверка доступности: `https://fishner-bot.onrender.com/health`.
+- Первая успешная публикация выполнена 7 октября 2026 года.
+- Деплой из GitHub Actions запускается только после успешных проверок через секрет `RENDER_DEPLOY_HOOK_URL`.
+
 ## Секреты
 
 Ни одно значение из этого списка не должно попадать в Git:

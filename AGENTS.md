@@ -23,6 +23,7 @@ This repository contains the private Telegram bot `@fishner_bot`, a fishing jour
 - Runtime: Node.js 24 LTS and TypeScript.
 - Telegram framework: grammY.
 - Production host: Render Free Web Service.
+- Production health URL: `https://fishner-bot.onrender.com/health`.
 - Persistent database: external Postgres, currently Neon Free.
 - Media MVP: Telegram `file_id`. A separate object-storage backup is a later milestone.
 - CI/CD: `.github/workflows/ci.yml`, with `RENDER_DEPLOY_HOOK_URL` stored as a GitHub Actions secret.
