@@ -9,6 +9,9 @@ This repository contains the private Telegram bot `@fishner_bot`, a fishing jour
 - The bot is private. New members join only through the configured invite code.
 - Catches, the activity feed, records, and aggregate statistics are shared by all approved members.
 - Every catch keeps its author. Rankings must show who caught the fish.
+- One entry session may contain 1–20 fish. Media, location, waterbody, date, lure, disposition, and notes are shared; species, weight, and length are collected and stored per fish.
+- A batch save is atomic: either every fish is stored as its own catch record or none are stored.
+- Catch leaderboards support all fish, species, and angler scopes, sorted by weight or length. Length rankings exclude catches without a length.
 - Exact latitude and longitude are visible to every approved member inside the bot, but must never appear in inline cards shared to arbitrary chats. A human-readable waterbody name may be shared.
 - Never commit or print `BOT_TOKEN`, `DATABASE_URL`, `FRIEND_INVITE_CODE`, `WEBHOOK_SECRET`, or `RENDER_DEPLOY_HOOK_URL`.
 - Do not create or overwrite `.env` automatically. `.env.example` documents variable names only.

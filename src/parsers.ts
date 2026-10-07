@@ -1,5 +1,11 @@
 const DECIMAL_RE = /^(\d+(?:[.,]\d+)?)\s*(кг|г|kg|g)?$/iu;
 
+export function parseFishCount(input: string): number | null {
+  if (!/^\d+$/u.test(input.trim())) return null;
+  const count = Number(input.trim());
+  return Number.isSafeInteger(count) && count >= 1 && count <= 20 ? count : null;
+}
+
 export function parseWeightGrams(input: string): number | null {
   const match = input.trim().match(DECIMAL_RE);
   if (!match?.[1]) return null;

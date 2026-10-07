@@ -1,5 +1,6 @@
 export type DraftStep =
   | "media"
+  | "count"
   | "species"
   | "weight"
   | "length"
@@ -14,7 +15,16 @@ export type DraftStep =
 export type MediaType = "photo" | "video";
 export type Disposition = "released" | "kept" | "unknown";
 
+export interface CatchItemDraft {
+  speciesName?: string;
+  weightGrams?: number;
+  lengthMm?: number;
+}
+
 export interface CatchDraft {
+  fishCount?: number;
+  currentFishIndex?: number;
+  fishes?: CatchItemDraft[];
   speciesName?: string;
   weightGrams?: number;
   lengthMm?: number;
@@ -70,4 +80,17 @@ export interface LeaderboardRow {
   totalWeightGrams: number;
   speciesCount: number;
   recordsCount: number;
+}
+
+export interface LeaderboardFilterOption {
+  id: number;
+  name: string;
+}
+
+export type CatchLeaderboardMetric = "weight" | "length";
+
+export interface CatchLeaderboardFilter {
+  metric: CatchLeaderboardMetric;
+  speciesId?: number;
+  userId?: number;
 }

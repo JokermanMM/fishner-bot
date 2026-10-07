@@ -67,6 +67,40 @@ export function previewKeyboard(): InlineKeyboard {
     .text("❌ Отменить", "draft:cancel");
 }
 
+export function statsKeyboard(): InlineKeyboard {
+  return new InlineKeyboard()
+    .text("🌍 Топ всех рыб", "rank:all:w")
+    .row()
+    .text("🐟 По виду", "rank:pick:s")
+    .text("👤 По рыбаку", "rank:pick:u");
+}
+
+export function catchLeaderboardKeyboard(scope: "all" | "s" | "u", id?: number): InlineKeyboard {
+  const prefix = scope === "all" ? "rank:all" : `rank:${scope}:${id}`;
+  return new InlineKeyboard()
+    .text("⚖️ По весу", `${prefix}:w`)
+    .text("📏 По длине", `${prefix}:l`)
+    .row()
+    .text("🐟 Выбрать вид", "rank:pick:s")
+    .text("👤 Выбрать рыбака", "rank:pick:u")
+    .row()
+    .text("🌍 Все рыбы", "rank:all:w")
+    .text("↩️ Общая статистика", "rank:overview");
+}
+
+export function filterPickerKeyboard(
+  kind: "s" | "u",
+  options: Array<{ id: number; name: string }>,
+): InlineKeyboard {
+  const keyboard = new InlineKeyboard();
+  options.forEach((option, index) => {
+    keyboard.text(option.name, `rank:${kind}:${option.id}:w`);
+    if (index % 2 === 1) keyboard.row();
+  });
+  if (options.length % 2 === 1) keyboard.row();
+  return keyboard.text("↩️ Общая статистика", "rank:overview");
+}
+
 export function savedCatchKeyboard(id: string, showLocation = false): InlineKeyboard {
   const keyboard = new InlineKeyboard().switchInline("📤 Поделиться", `catch:${id}`);
   if (showLocation) {

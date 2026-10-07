@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeSpeciesName, parseLengthMm, parseRussianDate, parseWeightGrams } from "../src/parsers.js";
+import { normalizeSpeciesName, parseFishCount, parseLengthMm, parseRussianDate, parseWeightGrams } from "../src/parsers.js";
+
+test("количество рыб ограничено разумным диапазоном", () => {
+  assert.equal(parseFishCount("5"), 5);
+  assert.equal(parseFishCount("0"), null);
+  assert.equal(parseFishCount("21"), null);
+  assert.equal(parseFishCount("2,5"), null);
+});
 
 test("вес понимает килограммы и граммы", () => {
   assert.equal(parseWeightGrams("4,85"), 4850);

@@ -2,9 +2,12 @@ import { randomUUID } from "node:crypto";
 import pg from "pg";
 import type {
   CatchDraft,
+  CatchItemDraft,
+  CatchLeaderboardFilter,
   CatchRecord,
   DraftRecord,
   DraftStep,
+  LeaderboardFilterOption,
   LeaderboardRow,
   RecordRow,
 } from "./types.js";
@@ -214,75 +217,105 @@ export class FishingRepository {
     return value == null ? null : asNumber(value as string | number);
   }
 
-  async createCatch(userId: number, draft: CatchDraft): Promise<{ record: CatchRecord; isNewRecord: boolean }> {
-    if (!draft.speciesName || !draft.weightGrams || !draft.caughtAt || !draft.disposition) {
-      throw new Error("Черновик не содержит обязательных полей");
-    }
+  async createCatchBatch(
+    userId: number,
+    draft: CatchDraft,
+  ): Promise<Array<{ record: CatchRecord; isNewRecord: boolean }>> {
+    const fishes: CatchItemDraft[] = draft.fishes?.length
+      ? draft.fishes
+      : [{
+          ...(draft.speciesName ? { speciesName: draft.speciesName } : {}),
+          ...(draft.weightGrams ? { weightGrams: draft.weightGrams } : {}),
+          ...(draft.lengthMm ? { lengthMm: draft.lengthMm } : {}),
+        }];
+    if (
+      !draft.caughtAt || !draft.disposition || fishes.length === 0 ||
+      fishes.some((fish) => !fish.speciesName || !fish.weightGrams)
+    ) throw new Error("Черновик не содержит обязательных полей");
 
+    const completeFishes = fishes as Array<Required<Pick<CatchItemDraft, "speciesName" | "weightGrams">> & CatchItemDraft>;
     const client = await this.db.connect();
     try {
       await client.query("BEGIN");
-      const normalizedName = draft.speciesName.toLocaleLowerCase("ru-RU");
       const now = new Date().toISOString();
-      await client.query(`
-        INSERT INTO species (user_id, name, normalized_name, created_at)
-        VALUES ($1, $2, $3, $4)
-        ON CONFLICT(user_id, normalized_name) DO UPDATE SET name = EXCLUDED.name
-      `, [userId, draft.speciesName, normalizedName, now]);
+      const previousBest = new Map<string, number | null>();
+      const maximumInBatch = new Map<string, number>();
+      for (const fish of completeFishes) {
+        const normalizedName = fish.speciesName.toLocaleLowerCase("ru-RU");
+        maximumInBatch.set(normalizedName, Math.max(maximumInBatch.get(normalizedName) ?? 0, fish.weightGrams));
+        if (previousBest.has(normalizedName)) continue;
+        const previousResult = await client.query(`
+          SELECT MAX(c.weight_grams) AS weight
+          FROM catches c
+          JOIN species s ON s.id = c.species_id
+          WHERE s.normalized_name = $1
+        `, [normalizedName]);
+        const previousValue = previousResult.rows[0]?.weight;
+        previousBest.set(normalizedName, previousValue == null ? null : asNumber(previousValue as string | number));
+      }
 
-      const speciesResult = await client.query(
-        "SELECT id FROM species WHERE user_id = $1 AND normalized_name = $2",
-        [userId, normalizedName],
-      );
-      const speciesId = speciesResult.rows[0]?.id;
-      if (speciesId == null) throw new Error("Не удалось создать вид рыбы");
+      const saved: Array<{ record: CatchRecord; isNewRecord: boolean }> = [];
+      for (const fish of completeFishes) {
+        const normalizedName = fish.speciesName.toLocaleLowerCase("ru-RU");
+        await client.query(`
+          INSERT INTO species (user_id, name, normalized_name, created_at)
+          VALUES ($1, $2, $3, $4)
+          ON CONFLICT(user_id, normalized_name) DO UPDATE SET name = EXCLUDED.name
+        `, [userId, fish.speciesName, normalizedName, now]);
 
-      const previousResult = await client.query(`
-        SELECT MAX(c.weight_grams) AS weight
-        FROM catches c
-        JOIN species s ON s.id = c.species_id
-        WHERE s.normalized_name = $1
-      `, [normalizedName]);
-      const previousValue = previousResult.rows[0]?.weight;
-      const previousWeight = previousValue == null ? null : asNumber(previousValue as string | number);
+        const speciesResult = await client.query(
+          "SELECT id FROM species WHERE user_id = $1 AND normalized_name = $2",
+          [userId, normalizedName],
+        );
+        const speciesId = speciesResult.rows[0]?.id;
+        if (speciesId == null) throw new Error("Не удалось создать вид рыбы");
 
-      const id = randomUUID();
-      await client.query(`
-        INSERT INTO catches (
-          id, user_id, species_id, weight_grams, length_mm, latitude, longitude,
-          waterbody, caught_at, lure, disposition, notes, media_type,
-          telegram_file_id, telegram_file_unique_id, created_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
-      `, [
-        id, userId, speciesId, draft.weightGrams, draft.lengthMm ?? null,
-        draft.latitude ?? null, draft.longitude ?? null, draft.waterbody ?? null,
-        draft.caughtAt, draft.lure ?? null, draft.disposition, draft.notes ?? null,
-        draft.mediaType ?? null, draft.telegramFileId ?? null,
-        draft.telegramFileUniqueId ?? null, now,
-      ]);
+        const id = randomUUID();
+        await client.query(`
+          INSERT INTO catches (
+            id, user_id, species_id, weight_grams, length_mm, latitude, longitude,
+            waterbody, caught_at, lure, disposition, notes, media_type,
+            telegram_file_id, telegram_file_unique_id, created_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        `, [
+          id, userId, speciesId, fish.weightGrams, fish.lengthMm ?? null,
+          draft.latitude ?? null, draft.longitude ?? null, draft.waterbody ?? null,
+          draft.caughtAt, draft.lure ?? null, draft.disposition, draft.notes ?? null,
+          draft.mediaType ?? null, draft.telegramFileId ?? null,
+          draft.telegramFileUniqueId ?? null, now,
+        ]);
+
+        const savedResult = await client.query(`
+          SELECT c.*, s.name AS species_name, u.first_name AS owner_name
+          FROM catches c
+          JOIN species s ON s.id = c.species_id
+          JOIN users u ON u.telegram_user_id = c.user_id
+          WHERE c.id = $1
+        `, [id]);
+        const savedRow = savedResult.rows[0] as CatchDbRow | undefined;
+        if (!savedRow) throw new Error("Не удалось прочитать сохранённый улов");
+        const bestBefore = previousBest.get(normalizedName) ?? null;
+        saved.push({
+          record: mapCatch(savedRow),
+          isNewRecord: (bestBefore == null || fish.weightGrams > bestBefore)
+            && fish.weightGrams === maximumInBatch.get(normalizedName),
+        });
+      }
       await client.query("DELETE FROM drafts WHERE user_id = $1", [userId]);
-
-      const savedResult = await client.query(`
-        SELECT c.*, s.name AS species_name, u.first_name AS owner_name
-        FROM catches c
-        JOIN species s ON s.id = c.species_id
-        JOIN users u ON u.telegram_user_id = c.user_id
-        WHERE c.id = $1
-      `, [id]);
-      const savedRow = savedResult.rows[0] as CatchDbRow | undefined;
-      if (!savedRow) throw new Error("Не удалось прочитать сохранённый улов");
-
       await client.query("COMMIT");
-      return {
-        record: mapCatch(savedRow),
-        isNewRecord: previousWeight == null || draft.weightGrams > previousWeight,
-      };
+      return saved;
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;
     } finally {
       client.release();
     }
+  }
+
+  async createCatch(userId: number, draft: CatchDraft): Promise<{ record: CatchRecord; isNewRecord: boolean }> {
+    const [saved] = await this.createCatchBatch(userId, draft);
+    if (!saved) throw new Error("Не удалось сохранить улов");
+    return saved;
   }
 
   async getCatch(id: string): Promise<CatchRecord | null> {
@@ -404,6 +437,75 @@ export class FishingRepository {
       || right.catchesCount - left.catchesCount
       || left.ownerName.localeCompare(right.ownerName, "ru"),
     );
+  }
+
+  async listSpeciesFilters(): Promise<LeaderboardFilterOption[]> {
+    const result = await this.db.query(`
+      SELECT MIN(s.id) AS id, s.name, s.normalized_name, COUNT(c.id) AS catches_count
+      FROM species s
+      JOIN catches c ON c.species_id = s.id
+      GROUP BY s.normalized_name, s.name
+      ORDER BY catches_count DESC, name
+      LIMIT 30
+    `);
+    return result.rows.map((row) => ({
+      id: asNumber(row.id as string | number),
+      name: String(row.name),
+    }));
+  }
+
+  async listUserFilters(): Promise<LeaderboardFilterOption[]> {
+    const result = await this.db.query(`
+      SELECT telegram_user_id AS id, first_name AS name
+      FROM users
+      WHERE is_approved = TRUE
+      ORDER BY first_name
+    `);
+    return result.rows.map((row) => ({
+      id: asNumber(row.id as string | number),
+      name: String(row.name),
+    }));
+  }
+
+  async getSpeciesFilterName(speciesId: number): Promise<string | null> {
+    const result = await this.db.query("SELECT name FROM species WHERE id = $1", [speciesId]);
+    return result.rows[0]?.name == null ? null : String(result.rows[0].name);
+  }
+
+  async getUserFilterName(userId: number): Promise<string | null> {
+    const result = await this.db.query(
+      "SELECT first_name FROM users WHERE telegram_user_id = $1 AND is_approved = TRUE",
+      [userId],
+    );
+    return result.rows[0]?.first_name == null ? null : String(result.rows[0].first_name);
+  }
+
+  async listTopCatches(filter: CatchLeaderboardFilter, limit = 10): Promise<CatchRecord[]> {
+    const values: unknown[] = [];
+    const conditions: string[] = [];
+    if (filter.speciesId != null) {
+      values.push(filter.speciesId);
+      conditions.push(`s.normalized_name = (SELECT normalized_name FROM species WHERE id = $${values.length})`);
+    }
+    if (filter.userId != null) {
+      values.push(filter.userId);
+      conditions.push(`c.user_id = $${values.length}`);
+    }
+    if (filter.metric === "length") conditions.push("c.length_mm IS NOT NULL");
+    values.push(limit);
+    const order = filter.metric === "length"
+      ? "c.length_mm DESC, c.weight_grams DESC"
+      : "c.weight_grams DESC, c.length_mm DESC NULLS LAST";
+    const result = await this.db.query(`
+      SELECT c.*, s.name AS species_name, u.first_name AS owner_name
+      FROM catches c
+      JOIN species s ON s.id = c.species_id
+      JOIN users u ON u.telegram_user_id = c.user_id
+      ${conditions.length ? `WHERE ${conditions.join(" AND ")}` : ""}
+      ORDER BY ${order}, c.caught_at ASC, c.created_at ASC
+      LIMIT $${values.length}
+    `, values);
+    return (result.rows as CatchDbRow[]).map(mapCatch);
   }
 
   async isRecord(record: CatchRecord): Promise<boolean> {

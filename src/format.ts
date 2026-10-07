@@ -1,4 +1,10 @@
-import type { CatchDraft, CatchRecord, LeaderboardRow, RecordRow } from "./types.js";
+import type {
+  CatchDraft,
+  CatchLeaderboardMetric,
+  CatchRecord,
+  LeaderboardRow,
+  RecordRow,
+} from "./types.js";
 
 export function escapeHtml(value: string): string {
   return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
@@ -43,6 +49,42 @@ export function formatDraftCard(draft: CatchDraft, timeZone: string, possibleRec
   lines.push(dispositionLabel(draft.disposition));
   if (draft.notes) lines.push(`\n<i>${escapeHtml(draft.notes)}</i>`);
   return lines.join("\n");
+}
+
+export function formatBatchDraftCard(
+  draft: CatchDraft,
+  timeZone: string,
+  possibleRecordIndexes: Set<number>,
+): string {
+  const fishes = draft.fishes ?? [];
+  const lines = [
+    `🎣 <b>Улов: ${fishes.length} ${pluralizeFish(fishes.length)}</b>`,
+    "",
+    ...fishes.flatMap((fish, index) => {
+      const details = [
+        `${index + 1}. <b>${escapeHtml(fish.speciesName || "Рыба")} — ${formatWeight(fish.weightGrams || 0)}</b>`,
+      ];
+      if (fish.lengthMm) details.push(`   📏 ${formatLength(fish.lengthMm)}`);
+      if (possibleRecordIndexes.has(index)) details.push("   🏆 Возможен новый рекорд компании");
+      return details;
+    }),
+  ];
+  if (draft.caughtAt) lines.push("", `📅 ${formatDate(draft.caughtAt, timeZone)}`);
+  if (draft.waterbody) lines.push(`📍 ${escapeHtml(draft.waterbody)}`);
+  if (draft.latitude != null && draft.longitude != null) lines.push("🗺 Точная геопозиция доступна участникам в боте");
+  if (draft.lure) lines.push(`🎣 ${escapeHtml(draft.lure)}`);
+  lines.push(dispositionLabel(draft.disposition));
+  if (draft.notes) lines.push(`\n<i>${escapeHtml(draft.notes)}</i>`);
+  return lines.join("\n");
+}
+
+function pluralizeFish(count: number): string {
+  const lastTwo = count % 100;
+  const last = count % 10;
+  if (lastTwo >= 11 && lastTwo <= 14) return "рыб";
+  if (last === 1) return "рыба";
+  if (last >= 2 && last <= 4) return "рыбы";
+  return "рыб";
 }
 
 export function formatCatchCard(record: CatchRecord, timeZone: string, isRecord: boolean): string {
@@ -94,5 +136,28 @@ export function formatLeaderboard(rows: LeaderboardRow[]): string {
       `${index + 1}. <b>${escapeHtml(row.ownerName)}</b>`,
       `   🐟 ${row.catchesCount} · ⚖️ ${formatWeight(row.totalWeightGrams)} · 🧩 ${row.speciesCount} видов · 🏆 ${row.recordsCount}`,
     ].join("\n")),
+  ].join("\n");
+}
+
+export function formatCatchLeaderboard(
+  records: CatchRecord[],
+  timeZone: string,
+  metric: CatchLeaderboardMetric,
+  title: string,
+): string {
+  if (records.length === 0) {
+    return metric === "length"
+      ? `📏 <b>${escapeHtml(title)}</b>\n\nНет уловов с указанной длиной.`
+      : `⚖️ <b>${escapeHtml(title)}</b>\n\nПодходящих уловов пока нет.`;
+  }
+  return [
+    `${metric === "weight" ? "⚖️" : "📏"} <b>${escapeHtml(title)}</b>`,
+    "",
+    ...records.map((record, index) => {
+      const value = metric === "weight"
+        ? formatWeight(record.weightGrams)
+        : formatLength(record.lengthMm ?? 0);
+      return `${index + 1}. <b>${escapeHtml(record.speciesName)} — ${value}</b>\n   👤 ${escapeHtml(record.ownerName)} · ${formatDate(record.caughtAt, timeZone)}`;
+    }),
   ].join("\n");
 }
