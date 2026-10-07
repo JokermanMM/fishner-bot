@@ -22,9 +22,11 @@ test("предпросмотр показывает несколько рыб в
       { speciesName: "Окунь", weightGrams: 900 },
     ],
   }, "Europe/Moscow", new Set([0]));
-  assert.match(card, /Улов: 2 рыбы/u);
-  assert.match(card, /Щука — 5 кг/u);
-  assert.match(card, /Окунь — 900 г/u);
+  assert.match(card, /2 рыбы/u);
+  assert.match(card, /Щука/u);
+  assert.match(card, /5 кг/u);
+  assert.match(card, /Окунь/u);
+  assert.match(card, /900 г/u);
   assert.match(card, /Возможен новый рекорд/u);
 });
 
@@ -48,5 +50,8 @@ test("топ уловов умеет показывать длину", () => {
     telegramFileUniqueId: null,
     createdAt: "2026-10-07T04:42:00.000Z",
   };
-  assert.match(formatCatchLeaderboard([record], "Europe/Moscow", "length", "Все рыбы"), /82,5 см/u);
+  const leaderboard = formatCatchLeaderboard([record], "length", "Все рыбы");
+  assert.match(leaderboard, /82,5 см/u);
+  assert.match(leaderboard, /5 кг/u);
+  assert.doesNotMatch(leaderboard, /2026|октябр|07:42/iu);
 });

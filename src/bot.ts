@@ -6,6 +6,7 @@ import {
 } from "grammy";
 import type { InlineQueryResult } from "grammy/types";
 import { FishingRepository } from "./db.js";
+import { isMessageNotModified, safeErrorMessage } from "./errors.js";
 import {
   formatBatchDraftCard,
   formatCatchCard,
@@ -143,7 +144,6 @@ function metricFromToken(token: string | undefined): CatchLeaderboardMetric {
 async function showCatchRanking(
   ctx: Context,
   repository: FishingRepository,
-  timeZone: string,
   scope: "all" | "s" | "u",
   metric: CatchLeaderboardMetric,
   id?: number,
@@ -156,12 +156,23 @@ async function showCatchRanking(
   let subject = "Все рыбы";
   if (scope === "s" && id != null) subject = await repository.getSpeciesFilterName(id) ?? "Неизвестный вид";
   if (scope === "u" && id != null) subject = await repository.getUserFilterName(id) ?? "Неизвестный рыбак";
-  const metricLabel = metric === "weight" ? "по весу" : "по длине";
   const records = await repository.listTopCatches(filter);
-  await ctx.editMessageText(formatCatchLeaderboard(records, timeZone, metric, `${subject}: ${metricLabel}`), {
-    parse_mode: "HTML",
-    reply_markup: catchLeaderboardKeyboard(scope, id),
-  });
+  await updateStatsMessage(
+    ctx,
+    formatCatchLeaderboard(records, metric, subject),
+    catchLeaderboardKeyboard(scope, metric, id),
+  );
+}
+
+async function updateStatsMessage(ctx: Context, text: string, replyMarkup: InlineKeyboard): Promise<void> {
+  const options = { parse_mode: "HTML" as const, reply_markup: replyMarkup };
+  try {
+    await ctx.editMessageText(text, options);
+  } catch (error) {
+    if (isMessageNotModified(error)) return;
+    console.warn(`Не удалось обновить сообщение статистики: ${safeErrorMessage(error)}. Отправляю новое.`);
+    await ctx.reply(text, options);
+  }
 }
 
 export function createFishingBot(
@@ -175,6 +186,12 @@ export function createFishingBot(
   bot.use(async (ctx, next) => {
     const user = currentUser(ctx);
     if (!user) return;
+
+    if (ctx.callbackQuery) {
+      await ctx.answerCallbackQuery().catch((error: unknown) => {
+        console.warn(`Не удалось подтвердить кнопку Telegram: ${safeErrorMessage(error)}. Обработка продолжена.`);
+      });
+    }
     await repository.upsertUser(user.id, user.firstName, user.username);
 
     const isStart = ctx.message?.text?.startsWith("/start") === true;
@@ -188,7 +205,9 @@ export function createFishingBot(
       return;
     }
     if (ctx.callbackQuery) {
-      await ctx.answerCallbackQuery({ text: "Нужна пригласительная ссылка", show_alert: true });
+      if (ctx.chat?.type === "private") {
+        await ctx.reply("🔐 Для этих кнопок нужна пригласительная ссылка от одного из участников.");
+      }
       return;
     }
     if (ctx.chat?.type === "private") {
@@ -221,7 +240,6 @@ export function createFishingBot(
   });
 
   bot.callbackQuery("draft:save", async (ctx) => {
-    await ctx.answerCallbackQuery();
     const user = currentUser(ctx);
     if (!user) return;
     const draft = await repository.getDraft(user.id);
@@ -253,7 +271,6 @@ export function createFishingBot(
   });
 
   bot.callbackQuery("draft:edit", async (ctx) => {
-    await ctx.answerCallbackQuery();
     const user = currentUser(ctx);
     if (!user) return;
     const draft = await repository.getDraft(user.id);
@@ -266,7 +283,6 @@ export function createFishingBot(
   });
 
   bot.callbackQuery("draft:cancel", async (ctx) => {
-    await ctx.answerCallbackQuery();
     if (ctx.from) await repository.clearDraft(ctx.from.id);
     await ctx.editMessageReplyMarkup().catch(() => undefined);
     await ctx.reply("Улов не сохранён.", { reply_markup: mainKeyboard() });
@@ -277,41 +293,37 @@ export function createFishingBot(
     const user = currentUser(ctx);
     const record = catchId ? await repository.getCatch(catchId) : null;
     if (!user || !record || record.latitude == null || record.longitude == null) {
-      await ctx.answerCallbackQuery({ text: "Точка этого улова недоступна", show_alert: true });
+      await ctx.reply("Точка этого улова недоступна.");
       return;
     }
-    await ctx.answerCallbackQuery();
     await ctx.replyWithLocation(record.latitude, record.longitude);
   });
 
   bot.callbackQuery("rank:overview", async (ctx) => {
-    await ctx.answerCallbackQuery();
-    await ctx.editMessageText(formatLeaderboard(await repository.listLeaderboard()), {
-      parse_mode: "HTML",
-      reply_markup: statsKeyboard(),
-    });
+    await updateStatsMessage(ctx, formatLeaderboard(await repository.listLeaderboard()), statsKeyboard());
   });
 
   bot.callbackQuery(/^rank:pick:(s|u)$/u, async (ctx) => {
-    await ctx.answerCallbackQuery();
     const kind = ctx.match[1] === "u" ? "u" : "s";
     const options = kind === "s" ? await repository.listSpeciesFilters() : await repository.listUserFilters();
-    const title = kind === "s" ? "🐟 Выберите вид рыбы" : "👤 Выберите рыбака";
-    await ctx.editMessageText(options.length ? title : `${title}\n\nПока нет данных для выбора.`, {
-      reply_markup: filterPickerKeyboard(kind, options),
-    });
+    const title = kind === "s"
+      ? "🐟 <b>Лидерборд по виду</b>\n\nВыберите рыбу:"
+      : "👤 <b>Лидерборд по рыбаку</b>\n\nВыберите участника:";
+    await updateStatsMessage(
+      ctx,
+      options.length ? title : `${title}\n\nПока нет данных для выбора.`,
+      filterPickerKeyboard(kind, options),
+    );
   });
 
   bot.callbackQuery(/^rank:all:(w|l)$/u, async (ctx) => {
-    await ctx.answerCallbackQuery();
-    await showCatchRanking(ctx, repository, timeZone, "all", metricFromToken(ctx.match[1]));
+    await showCatchRanking(ctx, repository, "all", metricFromToken(ctx.match[1]));
   });
 
   bot.callbackQuery(/^rank:(s|u):(\d+):(w|l)$/u, async (ctx) => {
-    await ctx.answerCallbackQuery();
     const scope = ctx.match[1] === "u" ? "u" : "s";
     const id = Number(ctx.match[2]);
-    await showCatchRanking(ctx, repository, timeZone, scope, metricFromToken(ctx.match[3]), id);
+    await showCatchRanking(ctx, repository, scope, metricFromToken(ctx.match[3]), id);
   });
 
   bot.on("inline_query", async (ctx) => {
@@ -394,9 +406,9 @@ export function createFishingBot(
 
     if (text === labels.stats) {
       const records = await repository.listTopCatches({ metric: "weight" });
-      await ctx.reply(formatCatchLeaderboard(records, timeZone, "weight", "Все рыбы: по весу"), {
+      await ctx.reply(formatCatchLeaderboard(records, "weight", "Все рыбы"), {
         parse_mode: "HTML",
-        reply_markup: catchLeaderboardKeyboard("all"),
+        reply_markup: catchLeaderboardKeyboard("all", "weight"),
       });
       return;
     }
@@ -565,7 +577,7 @@ export function createFishingBot(
   });
 
   bot.catch((error) => {
-    console.error("Ошибка обработки Telegram update", error.error);
+    console.error(`Ошибка обработки Telegram update: ${safeErrorMessage(error.error)}`);
   });
 
   return bot;

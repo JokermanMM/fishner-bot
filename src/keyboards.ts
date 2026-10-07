@@ -1,5 +1,5 @@
 import { InlineKeyboard, Keyboard } from "grammy";
-import type { Disposition } from "./types.js";
+import type { CatchLeaderboardMetric, Disposition } from "./types.js";
 
 export const labels = {
   add: "➕ Добавить улов",
@@ -75,23 +75,28 @@ export function previewKeyboard(): InlineKeyboard {
 
 export function statsKeyboard(): InlineKeyboard {
   return new InlineKeyboard()
-    .text("🌍 Топ всех рыб", "rank:all:w")
+    .text("🎣 К лидерборду уловов", "rank:all:w")
     .row()
-    .text("🐟 По виду", "rank:pick:s")
-    .text("👤 По рыбаку", "rank:pick:u");
+    .text("🐟 Выбрать вид", "rank:pick:s")
+    .text("👤 Выбрать рыбака", "rank:pick:u");
 }
 
-export function catchLeaderboardKeyboard(scope: "all" | "s" | "u", id?: number): InlineKeyboard {
+export function catchLeaderboardKeyboard(
+  scope: "all" | "s" | "u",
+  metric: CatchLeaderboardMetric,
+  id?: number,
+): InlineKeyboard {
   const prefix = scope === "all" ? "rank:all" : `rank:${scope}:${id}`;
   return new InlineKeyboard()
-    .text("⚖️ По весу", `${prefix}:w`)
-    .text("📏 По длине", `${prefix}:l`)
+    .text(metric === "weight" ? "✅ Вес" : "⚖️ Вес", `${prefix}:w`)
+    .text(metric === "length" ? "✅ Длина" : "📏 Длина", `${prefix}:l`)
+    .row()
+    .text(scope === "all" ? "✅ Все рыбы" : "🌍 Все рыбы", "rank:all:w")
     .row()
     .text("🐟 Выбрать вид", "rank:pick:s")
     .text("👤 Выбрать рыбака", "rank:pick:u")
     .row()
-    .text("🌍 Все рыбы", "rank:all:w")
-    .text("↩️ Общая статистика", "rank:overview");
+    .text("📊 Рейтинг рыбаков", "rank:overview");
 }
 
 export function filterPickerKeyboard(
@@ -100,11 +105,14 @@ export function filterPickerKeyboard(
 ): InlineKeyboard {
   const keyboard = new InlineKeyboard();
   options.forEach((option, index) => {
-    keyboard.text(option.name, `rank:${kind}:${option.id}:w`);
+    keyboard.text(`• ${option.name}`, `rank:${kind}:${option.id}:w`);
     if (index % 2 === 1) keyboard.row();
   });
   if (options.length % 2 === 1) keyboard.row();
-  return keyboard.text("↩️ Общая статистика", "rank:overview");
+  return keyboard
+    .text("🌍 Все рыбы", "rank:all:w")
+    .row()
+    .text("📊 Рейтинг рыбаков", "rank:overview");
 }
 
 export function savedCatchKeyboard(id: string, showLocation = false): InlineKeyboard {

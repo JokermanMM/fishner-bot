@@ -38,16 +38,17 @@ function dispositionLabel(value: CatchDraft["disposition"]): string {
 
 export function formatDraftCard(draft: CatchDraft, timeZone: string, possibleRecord: boolean): string {
   const lines = [
-    `🐟 <b>${escapeHtml(draft.speciesName || "Рыба")} — ${formatWeight(draft.weightGrams || 0)}</b>`,
+    `🐟 <b>${escapeHtml(draft.speciesName || "Рыба")}</b>`,
+    `⚖️ <b>${formatWeight(draft.weightGrams || 0)}</b>${draft.lengthMm ? `   ·   📏 ${formatLength(draft.lengthMm)}` : ""}`,
   ];
   if (possibleRecord) lines.push("🏆 <b>Возможно, это новый рекорд компании!</b>");
-  if (draft.lengthMm) lines.push(`📏 ${formatLength(draft.lengthMm)}`);
-  if (draft.caughtAt) lines.push(`📅 ${formatDate(draft.caughtAt, timeZone)}`);
-  if (draft.waterbody) lines.push(`📍 ${escapeHtml(draft.waterbody)}`);
-  if (draft.latitude != null && draft.longitude != null) lines.push("🗺 Точная геопозиция доступна участникам в боте");
-  if (draft.lure) lines.push(`🎣 ${escapeHtml(draft.lure)}`);
+  lines.push("");
+  if (draft.waterbody) lines.push(`📍 <b>Место:</b> ${escapeHtml(draft.waterbody)}`);
+  if (draft.caughtAt) lines.push(`📅 <b>Дата:</b> ${formatDate(draft.caughtAt, timeZone)}`);
+  if (draft.latitude != null && draft.longitude != null) lines.push("🗺 <i>Точная точка доступна друзьям в боте</i>");
+  if (draft.lure) lines.push(`🎣 <b>Приманка:</b> ${escapeHtml(draft.lure)}`);
   lines.push(dispositionLabel(draft.disposition));
-  if (draft.notes) lines.push(`\n<i>${escapeHtml(draft.notes)}</i>`);
+  if (draft.notes) lines.push(`\n💬 <b>Заметка</b>\n<i>${escapeHtml(draft.notes)}</i>`);
   return lines.join("\n");
 }
 
@@ -58,23 +59,24 @@ export function formatBatchDraftCard(
 ): string {
   const fishes = draft.fishes ?? [];
   const lines = [
-    `🎣 <b>Улов: ${fishes.length} ${pluralizeFish(fishes.length)}</b>`,
+    "🎣 <b>Предпросмотр улова</b>",
+    `🐟 ${fishes.length} ${pluralizeFish(fishes.length)}`,
     "",
     ...fishes.flatMap((fish, index) => {
       const details = [
-        `${index + 1}. <b>${escapeHtml(fish.speciesName || "Рыба")} — ${formatWeight(fish.weightGrams || 0)}</b>`,
+        `${index + 1}. <b>${escapeHtml(fish.speciesName || "Рыба")}</b>`,
+        `   ⚖️ <b>${formatWeight(fish.weightGrams || 0)}</b>${fish.lengthMm ? `   ·   📏 ${formatLength(fish.lengthMm)}` : ""}`,
       ];
-      if (fish.lengthMm) details.push(`   📏 ${formatLength(fish.lengthMm)}`);
       if (possibleRecordIndexes.has(index)) details.push("   🏆 Возможен новый рекорд компании");
       return details;
     }),
   ];
-  if (draft.caughtAt) lines.push("", `📅 ${formatDate(draft.caughtAt, timeZone)}`);
-  if (draft.waterbody) lines.push(`📍 ${escapeHtml(draft.waterbody)}`);
-  if (draft.latitude != null && draft.longitude != null) lines.push("🗺 Точная геопозиция доступна участникам в боте");
-  if (draft.lure) lines.push(`🎣 ${escapeHtml(draft.lure)}`);
+  if (draft.waterbody) lines.push("", `📍 <b>Место:</b> ${escapeHtml(draft.waterbody)}`);
+  if (draft.caughtAt) lines.push(`📅 <b>Дата:</b> ${formatDate(draft.caughtAt, timeZone)}`);
+  if (draft.latitude != null && draft.longitude != null) lines.push("🗺 <i>Точная точка доступна друзьям в боте</i>");
+  if (draft.lure) lines.push(`🎣 <b>Приманка:</b> ${escapeHtml(draft.lure)}`);
   lines.push(dispositionLabel(draft.disposition));
-  if (draft.notes) lines.push(`\n<i>${escapeHtml(draft.notes)}</i>`);
+  if (draft.notes) lines.push(`\n💬 <b>Заметка</b>\n<i>${escapeHtml(draft.notes)}</i>`);
   return lines.join("\n");
 }
 
@@ -100,7 +102,7 @@ export function formatCatchCard(record: CatchRecord, timeZone: string, isRecord:
     disposition: record.disposition,
     ...(record.notes == null ? {} : { notes: record.notes }),
   }, timeZone, isRecord);
-  return `${card}\n\n👤 <b>Рыбак:</b> ${escapeHtml(record.ownerName)}`;
+  return `${card}\n\n──────────\n👤 <b>Рыбак:</b> ${escapeHtml(record.ownerName)}`;
 }
 
 export function formatSharedCard(record: CatchRecord, timeZone: string, isRecord: boolean): string {
@@ -130,18 +132,19 @@ export function formatRecords(rows: RecordRow[], timeZone: string): string {
 export function formatLeaderboard(rows: LeaderboardRow[]): string {
   if (rows.length === 0) return "📊 Статистика пока пуста.";
   return [
-    "📊 <b>Рейтинг компании</b>",
+    "📊 <b>Рейтинг рыбаков</b>",
+    "<i>Общие результаты компании</i>",
     "",
     ...rows.map((row, index) => [
-      `${index + 1}. <b>${escapeHtml(row.ownerName)}</b>`,
-      `   🐟 ${row.catchesCount} · ⚖️ ${formatWeight(row.totalWeightGrams)} · 🧩 ${row.speciesCount} видов · 🏆 ${row.recordsCount}`,
+      `${placeLabel(index)} <b>${escapeHtml(row.ownerName)}</b>`,
+      `   🐟 Уловов: <b>${row.catchesCount}</b>   ·   ⚖️ ${formatWeight(row.totalWeightGrams)}`,
+      `   🧩 Видов: ${row.speciesCount}   ·   🏆 Рекордов: ${row.recordsCount}`,
     ].join("\n")),
   ].join("\n");
 }
 
 export function formatCatchLeaderboard(
   records: CatchRecord[],
-  timeZone: string,
   metric: CatchLeaderboardMetric,
   title: string,
 ): string {
@@ -150,14 +153,30 @@ export function formatCatchLeaderboard(
       ? `📏 <b>${escapeHtml(title)}</b>\n\nНет уловов с указанной длиной.`
       : `⚖️ <b>${escapeHtml(title)}</b>\n\nПодходящих уловов пока нет.`;
   }
+  const metricTitle = metric === "weight" ? "Рейтинг по весу" : "Рейтинг по длине";
   return [
-    `${metric === "weight" ? "⚖️" : "📏"} <b>${escapeHtml(title)}</b>`,
+    "🏆 <b>Лидерборд уловов</b>",
+    `${metric === "weight" ? "⚖️" : "📏"} <b>${metricTitle}</b> · ${escapeHtml(title)}`,
     "",
     ...records.map((record, index) => {
       const value = metric === "weight"
         ? formatWeight(record.weightGrams)
         : formatLength(record.lengthMm ?? 0);
-      return `${index + 1}. <b>${escapeHtml(record.speciesName)} — ${value}</b>\n   👤 ${escapeHtml(record.ownerName)} · ${formatDate(record.caughtAt, timeZone)}`;
+      const secondary = metric === "weight"
+        ? record.lengthMm == null ? "" : `   ·   📏 ${formatLength(record.lengthMm)}`
+        : `   ·   ⚖️ ${formatWeight(record.weightGrams)}`;
+      return [
+        `${placeLabel(index)} <b>${escapeHtml(record.speciesName)}</b>`,
+        `   ${metric === "weight" ? "⚖️" : "📏"} <b>${value}</b>${secondary}`,
+        `   👤 ${escapeHtml(record.ownerName)}`,
+      ].join("\n");
     }),
   ].join("\n");
+}
+
+function placeLabel(index: number): string {
+  if (index === 0) return "🥇";
+  if (index === 1) return "🥈";
+  if (index === 2) return "🥉";
+  return `${index + 1}.`;
 }

@@ -13,10 +13,13 @@ This repository contains the private Telegram bot `@fishner_bot`, a fishing jour
 - A batch save is atomic: either every fish is stored as its own catch record or none are stored.
 - Catch leaderboards support all fish, species, and angler scopes, sorted by weight or length. Length rankings exclude catches without a length.
 - The Statistics entry point opens the global catch leaderboard sorted by weight. Species filters are generated from species already present in catches.
+- Leaderboards show the result and angler without catch date/time. The active metric is visually marked in the inline keyboard.
+- Callback queries must be acknowledged before database work. An expired acknowledgement or a repeated active filter must never prevent the requested statistics view from being rendered.
 - At the location step, a member may reuse their own latest named location; this copies both coordinates and waterbody and skips the repeated waterbody question.
 - Catch dates accept both numeric Russian format and a Russian month name with time.
 - Exact latitude and longitude are visible to every approved member inside the bot, but must never appear in inline cards shared to arbitrary chats. A human-readable waterbody name may be shared.
 - Never commit or print `BOT_TOKEN`, `DATABASE_URL`, `FRIEND_INVITE_CODE`, `WEBHOOK_SECRET`, or `RENDER_DEPLOY_HOOK_URL`.
+- Error logging must use sanitized summaries only; never log grammY context, API objects, request payloads, or raw error objects because they may contain `BOT_TOKEN`.
 - Do not create or overwrite `.env` automatically. `.env.example` documents variable names only.
 - Render Free has an ephemeral filesystem. Persistent application data belongs in Postgres, never in a local SQLite file.
 - Production receives Telegram updates through a webhook. Polling is only for local development.

@@ -4,6 +4,7 @@ import { webhookCallback } from "grammy";
 import { loadConfig } from "./config.js";
 import { createPostgresPool, FishingRepository } from "./db.js";
 import { createFishingBot } from "./bot.js";
+import { safeErrorMessage } from "./errors.js";
 
 const config = loadConfig();
 const repository = new FishingRepository(createPostgresPool(config.databaseUrl));
@@ -70,7 +71,7 @@ if (config.botMode === "polling") {
     try {
       await telegramWebhook(request, response);
     } catch (error) {
-      console.error("Ошибка Telegram webhook", error);
+      console.error(`Ошибка Telegram webhook: ${safeErrorMessage(error)}`);
       if (!response.headersSent) response.writeHead(500).end();
     }
   });
