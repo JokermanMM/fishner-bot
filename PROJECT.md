@@ -42,6 +42,7 @@ GitHub Actions ◄── GitHub repository
 ```
 
 - Render запускает HTTP-сервис и принимает webhook Telegram.
+- Render собирает TypeScript с явно установленными `devDependencies`, даже при `NODE_ENV=production`, а после сборки удаляет их из runtime-окружения.
 - UptimeRobot проверяет `/health` раз в 5 минут и не даёт Render достичь 15 минут без входящего трафика.
 - Render всё равно может перезапустить Free-сервис во время обслуживания, поэтому webhook и база рассчитаны на безопасный рестарт.
 - Локальный диск Render временный, поэтому база находится в Neon Postgres.
