@@ -86,11 +86,33 @@ test("одна сессия сохраняет несколько рыб с об
   assert.ok(saved.every((item) => item.record.waterbody === "Лесное озеро"));
   assert.ok(saved.every((item) => item.record.telegramFileId === "photo-file-id"));
 
+  assert.deepEqual(await repository.getLastNamedLocation(1), {
+    latitude: 55.75,
+    longitude: 37.61,
+    waterbody: "Лесное озеро",
+  });
+
   const leaderboard = await repository.listLeaderboard();
   assert.equal(leaderboard[0]?.catchesCount, 3);
   assert.equal(leaderboard[0]?.totalWeightGrams, 8900);
   assert.equal(leaderboard[0]?.speciesCount, 2);
   assert.equal(leaderboard[0]?.recordsCount, 2);
+  await repository.close();
+});
+
+test("последнее место принадлежит конкретному рыбаку и требует названия", async () => {
+  const repository = await createRepository();
+  await repository.upsertUser(1, "Михаил");
+  await repository.upsertUser(2, "Андрей");
+  const base = { speciesName: "Щука", weightGrams: 1000, caughtAt: "2026-10-07T04:42:00.000Z", disposition: "released" as const };
+  await repository.createCatch(1, { ...base, latitude: 55.1, longitude: 37.1 });
+  await repository.createCatch(2, { ...base, waterbody: "Чужое озеро", latitude: 56.2, longitude: 38.2 });
+  assert.equal(await repository.getLastNamedLocation(1), null);
+  assert.deepEqual(await repository.getLastNamedLocation(2), {
+    latitude: 56.2,
+    longitude: 38.2,
+    waterbody: "Чужое озеро",
+  });
   await repository.close();
 });
 

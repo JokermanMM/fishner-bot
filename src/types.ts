@@ -94,3 +94,9 @@ export interface CatchLeaderboardFilter {
   speciesId?: number;
   userId?: number;
 }
+
+export interface PreviousLocation {
+  latitude: number;
+  longitude: number;
+  waterbody: string;
+}

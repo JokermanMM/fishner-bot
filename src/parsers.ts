@@ -33,18 +33,36 @@ export function parseLengthMm(input: string): number | null {
 }
 
 export function parseRussianDate(input: string): string | null {
-  const match = input.trim().match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})(?:\s+(\d{1,2}):(\d{2}))?$/u);
-  if (!match) return null;
+  const monthNames: Record<string, number> = {
+    январь: 1, января: 1,
+    февраль: 2, февраля: 2,
+    март: 3, марта: 3,
+    апрель: 4, апреля: 4,
+    май: 5, мая: 5,
+    июнь: 6, июня: 6,
+    июль: 7, июля: 7,
+    август: 8, августа: 8,
+    сентябрь: 9, сентября: 9,
+    октябрь: 10, октября: 10,
+    ноябрь: 11, ноября: 11,
+    декабрь: 12, декабря: 12,
+  };
+  const trimmed = input.trim().toLocaleLowerCase("ru-RU");
+  const numeric = trimmed.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})(?:\s+(?:в\s+)?(\d{1,2}):(\d{2}))?$/u);
+  const words = trimmed.match(/^(\d{1,2})\s+([а-яё]+)\s+(\d{4})(?:\s*(?:г\.?|года))?(?:\s+в\s+(\d{1,2}):(\d{2}))?$/u);
+  if (!numeric && !words) return null;
 
+  const match = numeric ?? words;
+  if (!match) return null;
   const [, dayRaw, monthRaw, yearRaw, hourRaw = "12", minuteRaw = "00"] = match;
   const day = Number(dayRaw);
-  const month = Number(monthRaw);
+  const month = numeric ? Number(monthRaw) : monthNames[monthRaw ?? ""];
   const year = Number(yearRaw);
   const hour = Number(hourRaw);
   const minute = Number(minuteRaw);
 
   if (
-    year < 1900 || year > 2200 || month < 1 || month > 12 || day < 1 || day > 31 ||
+    month == null || year < 1900 || year > 2200 || month < 1 || month > 12 || day < 1 || day > 31 ||
     hour < 0 || hour > 23 || minute < 0 || minute > 59
   ) return null;
 

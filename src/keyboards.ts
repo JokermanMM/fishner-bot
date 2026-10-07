@@ -31,10 +31,16 @@ export function dateKeyboard(): Keyboard {
   return new Keyboard().text(labels.now).row().text(labels.cancel).resized().oneTime();
 }
 
-export function locationKeyboard(): Keyboard {
-  return new Keyboard()
-    .requestLocation("📍 Отправить геопозицию")
-    .row()
+export function previousLocationButtonLabel(waterbody: string): string {
+  const compact = waterbody.trim().replace(/\s+/gu, " ");
+  const visibleName = compact.length > 32 ? `${compact.slice(0, 31)}…` : compact;
+  return `📌 Предыдущая геолокация (${visibleName})`;
+}
+
+export function locationKeyboard(previousWaterbody?: string): Keyboard {
+  const keyboard = new Keyboard().requestLocation("📍 Отправить геопозицию").row();
+  if (previousWaterbody) keyboard.text(previousLocationButtonLabel(previousWaterbody)).row();
+  return keyboard
     .text(labels.skip)
     .text(labels.cancel)
     .resized()

@@ -23,6 +23,7 @@ import {
   locationKeyboard,
   mainKeyboard,
   parseDisposition,
+  previousLocationButtonLabel,
   previewKeyboard,
   savedCatchKeyboard,
   skipKeyboard,
@@ -52,16 +53,16 @@ function fishProgress(data?: CatchDraft): string {
   return total > 1 ? ` <b>Рыба ${current} из ${total}.</b>` : "";
 }
 
-function nextPrompt(step: DraftStep, data?: CatchDraft): { text: string; reply_markup?: ReturnType<typeof skipKeyboard> } {
+function nextPrompt(step: DraftStep, data?: CatchDraft, previousWaterbody?: string): { text: string; reply_markup?: ReturnType<typeof skipKeyboard> } {
   switch (step) {
     case "media": return { text: "📸 Пришлите фото или видео улова. Можно пропустить.", reply_markup: skipKeyboard() };
     case "count": return { text: "🔢 <b>Сколько рыб вы хотите внести?</b> Введите число от 1 до 20." };
     case "species": return { text: `🐟${fishProgress(data)} Что за рыба? Например: <b>щука</b>.` };
     case "weight": return { text: `⚖️${fishProgress(data)} Укажите вес: <b>4,85 кг</b> или <b>850 г</b>.` };
     case "length": return { text: `📏${fishProgress(data)} Какая длина? Например: <b>72 см</b>. Можно пропустить.`, reply_markup: skipKeyboard() };
-    case "location": return { text: "📍 Отправьте точную геопозицию. Её смогут открыть друзья внутри бота, но она не попадёт в карточку для внешнего чата.", reply_markup: locationKeyboard() };
+    case "location": return { text: "📍 Отправьте точную геопозицию. Её смогут открыть друзья внутри бота, но она не попадёт в карточку для внешнего чата.", reply_markup: locationKeyboard(previousWaterbody) };
     case "waterbody": return { text: "🌊 Как называется водоём или место?", reply_markup: skipKeyboard() };
-    case "caught_at": return { text: "📅 Когда была поймана рыба? Нажмите «Сейчас» или введите <b>07.10.2026 07:42</b>.", reply_markup: dateKeyboard() };
+    case "caught_at": return { text: "📅 Когда была поймана рыба? Нажмите «Сейчас» или введите <b>27.10.2026 09:00</b> либо <b>27 октября 2026 г. в 09:00</b>.", reply_markup: dateKeyboard() };
     case "lure": return { text: "🎣 На что поймана? Например: <b>джиг, силикон 12 см</b>.", reply_markup: skipKeyboard() };
     case "disposition": return { text: "Что сделали с рыбой?", reply_markup: dispositionKeyboard() };
     case "notes": return { text: "✍️ Добавьте короткую историю или заметку.", reply_markup: skipKeyboard() };
@@ -76,8 +77,15 @@ function followingStep(step: DraftStep): DraftStep {
   return orderedSteps[index + 1] ?? "preview";
 }
 
-async function sendPrompt(ctx: Context, step: DraftStep, data?: CatchDraft): Promise<void> {
-  const prompt = nextPrompt(step, data);
+async function sendPrompt(
+  ctx: Context,
+  repository: FishingRepository,
+  userId: number,
+  step: DraftStep,
+  data?: CatchDraft,
+): Promise<void> {
+  const previousLocation = step === "location" ? await repository.getLastNamedLocation(userId) : null;
+  const prompt = nextPrompt(step, data, previousLocation?.waterbody);
   await ctx.reply(prompt.text, { parse_mode: "HTML", ...(prompt.reply_markup ? { reply_markup: prompt.reply_markup } : {}) });
 }
 
@@ -254,7 +262,7 @@ export function createFishingBot(
     await repository.setDraft(user.id, "count", data);
     await ctx.editMessageReplyMarkup().catch(() => undefined);
     await ctx.reply("✏️ Пройдём поля ещё раз. Фото уже сохранено в черновике.");
-    await sendPrompt(ctx, "count", data);
+    await sendPrompt(ctx, repository, user.id, "count", data);
   });
 
   bot.callbackQuery("draft:cancel", async (ctx) => {
@@ -356,7 +364,7 @@ export function createFishingBot(
     if (text === labels.add) {
       const data: CatchDraft = { caughtAt: nowIso(), disposition: "unknown", fishes: [], currentFishIndex: 0 };
       await repository.setDraft(user.id, "media", data);
-      await sendPrompt(ctx, "media", data);
+      await sendPrompt(ctx, repository, user.id, "media", data);
       return;
     }
 
@@ -385,9 +393,10 @@ export function createFishingBot(
     }
 
     if (text === labels.stats) {
-      await ctx.reply(formatLeaderboard(await repository.listLeaderboard()), {
+      const records = await repository.listTopCatches({ metric: "weight" });
+      await ctx.reply(formatCatchLeaderboard(records, timeZone, "weight", "Все рыбы: по весу"), {
         parse_mode: "HTML",
-        reply_markup: statsKeyboard(),
+        reply_markup: catchLeaderboardKeyboard("all"),
       });
       return;
     }
@@ -412,6 +421,7 @@ export function createFishingBot(
     };
     const skip = text === labels.skip;
     let valid = true;
+    let reusedPreviousLocation = false;
 
     switch (draft.step) {
       case "media": {
@@ -477,7 +487,15 @@ export function createFishingBot(
         if (ctx.message.location) {
           data.latitude = ctx.message.location.latitude;
           data.longitude = ctx.message.location.longitude;
-        } else if (!skip) valid = false;
+        } else if (!skip) {
+          const previousLocation = await repository.getLastNamedLocation(user.id);
+          if (previousLocation && text === previousLocationButtonLabel(previousLocation.waterbody)) {
+            data.latitude = previousLocation.latitude;
+            data.longitude = previousLocation.longitude;
+            data.waterbody = previousLocation.waterbody;
+            reusedPreviousLocation = true;
+          } else valid = false;
+        }
         break;
       }
       case "waterbody": {
@@ -518,11 +536,12 @@ export function createFishingBot(
 
     if (!valid) {
       await ctx.reply("Не смог распознать значение. Попробуйте ещё раз 👇");
-      await sendPrompt(ctx, draft.step, data);
+      await sendPrompt(ctx, repository, user.id, draft.step, data);
       return;
     }
 
     let next = followingStep(draft.step);
+    if (draft.step === "location" && reusedPreviousLocation) next = "caught_at";
     if (draft.step === "length") {
       const currentIndex = data.currentFishIndex ?? 0;
       if (currentIndex + 1 < (data.fishCount ?? 1)) {
@@ -541,7 +560,7 @@ export function createFishingBot(
           await ctx.reply(`Раньше вы добавляли: ${species.join(", ")}`);
         }
       }
-      await sendPrompt(ctx, next, data);
+      await sendPrompt(ctx, repository, user.id, next, data);
     }
   });
 

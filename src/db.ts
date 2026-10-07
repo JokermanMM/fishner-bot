@@ -9,6 +9,7 @@ import type {
   DraftStep,
   LeaderboardFilterOption,
   LeaderboardRow,
+  PreviousLocation,
   RecordRow,
 } from "./types.js";
 
@@ -204,6 +205,27 @@ export class FishingRepository {
       LIMIT $2
     `, [userId, limit]);
     return result.rows.map((row) => String(row.name));
+  }
+
+  async getLastNamedLocation(userId: number): Promise<PreviousLocation | null> {
+    const result = await this.db.query(`
+      SELECT latitude, longitude, waterbody
+      FROM catches
+      WHERE user_id = $1
+        AND latitude IS NOT NULL
+        AND longitude IS NOT NULL
+        AND waterbody IS NOT NULL
+        AND waterbody <> ''
+      ORDER BY created_at DESC, caught_at DESC
+      LIMIT 1
+    `, [userId]);
+    const row = result.rows[0];
+    if (row?.latitude == null || row.longitude == null || row.waterbody == null) return null;
+    return {
+      latitude: asNumber(row.latitude as string | number),
+      longitude: asNumber(row.longitude as string | number),
+      waterbody: String(row.waterbody),
+    };
   }
 
   async getBestWeight(speciesName: string): Promise<number | null> {
