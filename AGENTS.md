@@ -17,6 +17,7 @@ This repository contains the private Telegram bot `@fishner_bot`, a fishing jour
 - Render builds with `NODE_ENV=production`; the build command must explicitly install dev dependencies before compiling TypeScript, then may prune them.
 - GitHub Actions must run checks before triggering the Render deploy hook.
 - UptimeRobot may monitor the public `/health` endpoint every 5 minutes to reduce Render Free cold starts. This does not replace health checks, persistence, or graceful restart handling.
+- The public `/health` endpoint must return `200` for both `GET` and `HEAD`; UptimeRobot probes it with `HEAD`.
 
 ## Architecture
 

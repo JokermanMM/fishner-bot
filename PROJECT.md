@@ -54,6 +54,7 @@ GitHub Actions ◄── GitHub repository
 - Проверка доступности: `https://fishner-bot.onrender.com/health`.
 - Первая успешная публикация выполнена 7 октября 2026 года.
 - Деплой из GitHub Actions запускается только после успешных проверок через секрет `RENDER_DEPLOY_HOOK_URL`.
+- UptimeRobot проверяет `/health` методом `HEAD` каждые 5 минут; endpoint также поддерживает обычный `GET` для ручной диагностики.
 
 ## Секреты
 

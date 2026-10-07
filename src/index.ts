@@ -48,9 +48,9 @@ if (config.botMode === "polling") {
 
   server = http.createServer(async (request, response) => {
     const url = new URL(request.url || "/", "http://localhost");
-    if (request.method === "GET" && url.pathname === "/health") {
+    if ((request.method === "GET" || request.method === "HEAD") && url.pathname === "/health") {
       response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
-      response.end(JSON.stringify({ status: "ok" }));
+      response.end(request.method === "HEAD" ? undefined : JSON.stringify({ status: "ok" }));
       return;
     }
     if (request.method === "GET" && url.pathname === "/") {
