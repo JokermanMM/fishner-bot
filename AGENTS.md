@@ -28,6 +28,12 @@ This repository contains the private Telegram bot `@fishner_bot`, a fishing jour
 - UptimeRobot may monitor the public `/health` endpoint every 5 minutes to reduce Render Free cold starts. This does not replace health checks, persistence, or graceful restart handling.
 - The public `/health` endpoint must return `200` for both `GET` and `HEAD`; UptimeRobot probes it with `HEAD`.
 
+## Production data cleanup
+
+- A test-data reset deletes only `catches` and then `species`, inside one database transaction.
+- Preserve `users`, membership approvals, `drafts`, the database schema, and every secret unless the user explicitly expands the cleanup scope.
+- Before a production reset, verify the target database and record row counts. After it, verify that catches and species are empty and that the user count is unchanged.
+
 ## Architecture
 
 - Runtime: Node.js 24 LTS and TypeScript.
