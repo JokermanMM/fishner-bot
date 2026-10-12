@@ -180,8 +180,10 @@ export function createFishingBot(
   repository: FishingRepository,
   timeZone: string,
   friendInviteCode: string,
+  miniAppUrl?: string,
 ): Bot {
   const bot = new Bot(token);
+  const homeKeyboard = () => mainKeyboard(miniAppUrl);
 
   bot.use(async (ctx, next) => {
     const user = currentUser(ctx);
@@ -229,14 +231,14 @@ export function createFishingBot(
     }
     await ctx.reply(
       `🎣 <b>Наш рыболовный дневник</b>\n\nЗдесь собираются уловы, рекорды и статистика всей компании.\n\nДобавим новый улов?`,
-      { parse_mode: "HTML", reply_markup: mainKeyboard() },
+      { parse_mode: "HTML", reply_markup: homeKeyboard() },
     );
   });
 
   bot.command("cancel", async (ctx) => {
     if (!ctx.from) return;
     await repository.clearDraft(ctx.from.id);
-    await ctx.reply("Ввод улова отменён. Данные черновика удалены.", { reply_markup: mainKeyboard() });
+    await ctx.reply("Ввод улова отменён. Данные черновика удалены.", { reply_markup: homeKeyboard() });
   });
 
   bot.callbackQuery("draft:save", async (ctx) => {
@@ -244,7 +246,7 @@ export function createFishingBot(
     if (!user) return;
     const draft = await repository.getDraft(user.id);
     if (!draft || draft.step !== "preview") {
-      await ctx.reply("Черновик уже сохранён или отменён.", { reply_markup: mainKeyboard() });
+      await ctx.reply("Черновик уже сохранён или отменён.", { reply_markup: homeKeyboard() });
       return;
     }
     const saved = await repository.createCatchBatch(user.id, draft.data);
@@ -254,7 +256,7 @@ export function createFishingBot(
       ? `✅ Сохранено рыб: ${saved.length}. 🏆 Новых рекордов: ${newRecordsCount}.`
       : `✅ Сохранено рыб: ${saved.length}.`;
     await ctx.reply(summary, {
-      reply_markup: mainKeyboard(),
+      reply_markup: homeKeyboard(),
     });
     for (const [index, item] of saved.entries()) {
       const { record, isNewRecord } = item;
@@ -285,7 +287,7 @@ export function createFishingBot(
   bot.callbackQuery("draft:cancel", async (ctx) => {
     if (ctx.from) await repository.clearDraft(ctx.from.id);
     await ctx.editMessageReplyMarkup().catch(() => undefined);
-    await ctx.reply("Улов не сохранён.", { reply_markup: mainKeyboard() });
+    await ctx.reply("Улов не сохранён.", { reply_markup: homeKeyboard() });
   });
 
   bot.callbackQuery(/^catch:location:([0-9a-f-]{36})$/u, async (ctx) => {
@@ -369,7 +371,7 @@ export function createFishingBot(
     const text = ctx.message.text?.trim();
     if (text === labels.cancel) {
       await repository.clearDraft(user.id);
-      await ctx.reply("Ввод улова отменён.", { reply_markup: mainKeyboard() });
+      await ctx.reply("Ввод улова отменён.", { reply_markup: homeKeyboard() });
       return;
     }
 
@@ -383,7 +385,7 @@ export function createFishingBot(
     if (text === labels.recent) {
       const records = await repository.listRecentCatches(5);
       if (records.length === 0) {
-        await ctx.reply("📚 Общая лента пока пуста. Добавьте первый улов!", { reply_markup: mainKeyboard() });
+        await ctx.reply("📚 Общая лента пока пуста. Добавьте первый улов!", { reply_markup: homeKeyboard() });
         return;
       }
       await ctx.reply(`📚 <b>Последние уловы: ${records.length}</b>`, { parse_mode: "HTML" });
@@ -400,7 +402,7 @@ export function createFishingBot(
     }
 
     if (text === labels.records) {
-      await ctx.reply(formatRecords(await repository.listRecords(), timeZone), { parse_mode: "HTML", reply_markup: mainKeyboard() });
+      await ctx.reply(formatRecords(await repository.listRecords(), timeZone), { parse_mode: "HTML", reply_markup: homeKeyboard() });
       return;
     }
 
@@ -415,7 +417,7 @@ export function createFishingBot(
 
     const draft = await repository.getDraft(user.id);
     if (!draft) {
-      await ctx.reply("Выберите действие в меню.", { reply_markup: mainKeyboard() });
+      await ctx.reply("Выберите действие в меню.", { reply_markup: homeKeyboard() });
       return;
     }
 

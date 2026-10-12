@@ -3,7 +3,9 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 COPY tsconfig.json ./
+COPY scripts ./scripts
 COPY src ./src
+COPY web ./web
 RUN npm run build
 
 FROM node:24-bookworm-slim AS runtime

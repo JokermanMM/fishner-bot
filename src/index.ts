@@ -5,17 +5,25 @@ import { loadConfig } from "./config.js";
 import { createPostgresPool, FishingRepository } from "./db.js";
 import { createFishingBot } from "./bot.js";
 import { safeErrorMessage } from "./errors.js";
+import { MiniAppHandler } from "./mini-app.js";
 
 const config = loadConfig();
 const repository = new FishingRepository(createPostgresPool(config.databaseUrl));
 await repository.migrate();
 
-const bot = createFishingBot(config.botToken, repository, config.timeZone, config.friendInviteCode);
+const miniAppUrl = config.publicUrl ? `${config.publicUrl}/app` : undefined;
+const bot = createFishingBot(config.botToken, repository, config.timeZone, config.friendInviteCode, miniAppUrl);
+const miniApp = new MiniAppHandler(repository, config.botToken);
 await bot.init();
 await bot.api.setMyCommands([
   { command: "start", description: "Открыть главное меню" },
   { command: "cancel", description: "Отменить ввод улова" },
 ]);
+if (miniAppUrl) {
+  await bot.api.setChatMenuButton({
+    menu_button: { type: "web_app", text: "Открыть дневник", web_app: { url: miniAppUrl } },
+  });
+}
 
 let server: http.Server | undefined;
 let shuttingDown = false;
@@ -57,6 +65,13 @@ if (config.botMode === "polling") {
     if (request.method === "GET" && url.pathname === "/") {
       response.writeHead(200, { "content-type": "text/plain; charset=utf-8" });
       response.end("🎣 Fishing journal bot is running");
+      return;
+    }
+    try {
+      if (await miniApp.handle(request, response, url)) return;
+    } catch (error) {
+      console.error(`Ошибка Mini App: ${safeErrorMessage(error)}`);
+      if (!response.headersSent) response.writeHead(500).end();
       return;
     }
     if (request.method !== "POST" || url.pathname !== webhookPath) {

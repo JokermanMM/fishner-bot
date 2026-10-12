@@ -6,19 +6,22 @@ export const labels = {
   recent: "📚 Общая лента",
   records: "🏆 Рекорды",
   stats: "📊 Статистика",
+  app: "🌊 Открыть дневник",
   skip: "Пропустить",
   now: "Сейчас",
   cancel: "❌ Отмена",
 } as const;
 
-export function mainKeyboard(): Keyboard {
-  return new Keyboard()
+export function mainKeyboard(miniAppUrl?: string): Keyboard {
+  const keyboard = new Keyboard()
     .text(labels.add)
     .row()
     .text(labels.recent)
     .text(labels.records)
     .row()
-    .text(labels.stats)
+    .text(labels.stats);
+  if (miniAppUrl) keyboard.row().webApp(labels.app, miniAppUrl);
+  return keyboard
     .resized()
     .persistent();
 }

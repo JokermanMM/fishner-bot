@@ -18,6 +18,8 @@ This repository contains the private Telegram bot `@fishner_bot`, a fishing jour
 - At the location step, a member may reuse their own latest named location; this copies both coordinates and waterbody and skips the repeated waterbody question.
 - Catch dates accept both numeric Russian format and a Russian month name with time.
 - Exact latitude and longitude are visible to every approved member inside the bot, but must never appear in inline cards shared to arbitrary chats. A human-readable waterbody name may be shared.
+- The Mini App is part of the private bot experience. Every data or media API request must validate fresh Telegram `initData` and then confirm that the Telegram user is approved.
+- Never expose Telegram `file_id` values, bot tokens, or Telegram file-download URLs in Mini App JSON. Media is proxied by the server only after authorization.
 - Never commit or print `BOT_TOKEN`, `DATABASE_URL`, `FRIEND_INVITE_CODE`, `WEBHOOK_SECRET`, or `RENDER_DEPLOY_HOOK_URL`.
 - Error logging must use sanitized summaries only; never log grammY context, API objects, request payloads, or raw error objects because they may contain `BOT_TOKEN`.
 - Do not create or overwrite `.env` automatically. `.env.example` documents variable names only.
@@ -41,7 +43,8 @@ This repository contains the private Telegram bot `@fishner_bot`, a fishing jour
 - Production host: Render Free Web Service.
 - Production health URL: `https://fishner-bot.onrender.com/health`.
 - Persistent database: external Postgres, currently Neon Free.
-- Media MVP: Telegram `file_id`. A separate object-storage backup is a later milestone.
+- Media storage: Telegram `file_id`; a separate object-storage backup is intentionally outside the current roadmap.
+- Mini App: static mobile-first assets served by the existing Render service at `/app`, with authenticated same-origin API routes under `/api/mini-app/`.
 - CI/CD: `.github/workflows/ci.yml`, with `RENDER_DEPLOY_HOOK_URL` stored as a GitHub Actions secret.
 - Availability helper: UptimeRobot HTTP monitor targeting the Render `/health` endpoint.
 
