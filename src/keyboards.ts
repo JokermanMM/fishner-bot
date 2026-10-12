@@ -1,5 +1,5 @@
 import { InlineKeyboard, Keyboard } from "grammy";
-import type { CatchLeaderboardMetric, Disposition } from "./types.js";
+import type { AnglerOption, CatchLeaderboardMetric, Disposition } from "./types.js";
 
 export const labels = {
   add: "➕ Добавить улов",
@@ -8,7 +8,11 @@ export const labels = {
   stats: "📊 Статистика",
   app: "🌊 Открыть дневник",
   skip: "Пропустить",
-  now: "Сейчас",
+  today: "Сегодня",
+  yesterday: "Вчера",
+  photosDone: "✅ Фото добавлены",
+  me: "👤 Я",
+  sameAngler: "↩️ Тот же рыбак",
   cancel: "❌ Отмена",
 } as const;
 
@@ -31,7 +35,31 @@ export function skipKeyboard(): Keyboard {
 }
 
 export function dateKeyboard(): Keyboard {
-  return new Keyboard().text(labels.now).row().text(labels.cancel).resized().oneTime();
+  return new Keyboard()
+    .text(labels.today)
+    .text(labels.yesterday)
+    .row()
+    .text(labels.cancel)
+    .resized()
+    .oneTime();
+}
+
+export function photoKeyboard(): Keyboard {
+  return new Keyboard().text(labels.photosDone).row().text(labels.cancel).resized();
+}
+
+export function anglerButtonLabel(angler: AnglerOption): string {
+  return angler.username ? `${angler.displayName} (@${angler.username})` : angler.displayName;
+}
+
+export function anglerKeyboard(anglers: AnglerOption[], currentUserId: number, includePrevious: boolean): Keyboard {
+  const keyboard = new Keyboard().text(labels.me);
+  if (includePrevious) keyboard.text(labels.sameAngler);
+  keyboard.row();
+  for (const angler of anglers.filter((item) => item.id !== currentUserId)) {
+    keyboard.text(anglerButtonLabel(angler)).row();
+  }
+  return keyboard.text(labels.cancel).resized().oneTime();
 }
 
 export function previousLocationButtonLabel(waterbody: string): string {

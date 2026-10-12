@@ -24,11 +24,11 @@ test("длина понимает сантиметры и миллиметры",
 
 test("дата проверяет календарные значения", () => {
   assert.equal(parseRussianDate("31.02.2026"), null);
-  assert.equal(parseRussianDate("07.10.2026 07:42"), "2026-10-07T04:42:00.000Z");
-  assert.equal(parseRussianDate("27.10.2026 09:00"), "2026-10-27T06:00:00.000Z");
-  assert.equal(parseRussianDate("27 октября 2026 г. в 09:00"), "2026-10-27T06:00:00.000Z");
-  assert.equal(parseRussianDate("27 Октября 2026 года в 09:00"), "2026-10-27T06:00:00.000Z");
-  assert.equal(parseRussianDate("27 неизвестного 2026 г. в 09:00"), null);
+  assert.equal(parseRussianDate("07.10.2026"), "2026-10-07");
+  assert.equal(parseRussianDate("27 октября 2026 г."), "2026-10-27");
+  assert.equal(parseRussianDate("27 Октября 2026 года"), "2026-10-27");
+  assert.equal(parseRussianDate("27.10.2026 09:00"), null);
+  assert.equal(parseRussianDate("27 неизвестного 2026 г."), null);
 });
 
 test("вид рыбы нормализуется", () => {

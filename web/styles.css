@@ -65,9 +65,9 @@ select { width: 100%; min-width: 0; padding: 11px 32px 11px 12px; border: 1px so
 .catch-card:active { transform: scale(.985); }
 .catch-card__media { position: relative; display: grid; place-items: center; aspect-ratio: 1.18; overflow: hidden; background: linear-gradient(145deg, #174856, #092a39); }
 .catch-card__media::before { content: "≈"; color: rgba(146, 230, 214, .25); font: 700 55px Georgia, serif; }
-.catch-card__media img, .catch-card__media video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.catch-card__media video { pointer-events: none; }
+.catch-card__media img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .catch-card__badge { position: absolute; top: 9px; left: 9px; z-index: 2; padding: 5px 8px; border-radius: 999px; color: #08251f; background: rgba(241, 255, 250, .88); backdrop-filter: blur(8px); font-size: 10px; font-weight: 850; }
+.catch-card__angler { position: absolute; right: 9px; bottom: 9px; left: 9px; z-index: 2; overflow: hidden; padding: 6px 8px; border-radius: 10px; color: white; background: rgba(3, 22, 30, .7); backdrop-filter: blur(7px); font-size: 10px; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
 .catch-card__body { padding: 12px; }
 .catch-card__body h3 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 17px; }
 .catch-card__weight { margin-top: 5px; color: var(--gold); font-size: 16px; font-weight: 850; }
@@ -143,15 +143,26 @@ select { width: 100%; min-width: 0; padding: 11px 32px 11px 12px; border: 1px so
 .catch-dialog::backdrop { background: rgba(0, 11, 19, .74); backdrop-filter: blur(7px); }
 .dialog-close { position: fixed; z-index: 5; margin: 12px 0 0 calc(min(100% - 40px, 520px) - 48px); width: 38px; height: 38px; border: 1px solid rgba(255,255,255,.13); border-radius: 50%; color: white; background: rgba(2,20,29,.75); font-size: 25px; backdrop-filter: blur(8px); }
 .dialog-media { position: relative; min-height: 220px; display: grid; place-items: center; background: linear-gradient(145deg, #174856, #092a39); }
+.dialog-media.is-gallery { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; }
+.dialog-media.is-gallery::-webkit-scrollbar { display: none; }
 .dialog-media:empty::before { content: "≈"; color: rgba(146,230,214,.24); font: 700 70px Georgia, serif; }
-.dialog-media img, .dialog-media video { width: 100%; max-height: 56dvh; object-fit: cover; }
+.dialog-photo { position: relative; display: grid; place-items: center; width: 100%; min-width: 100%; min-height: 220px; scroll-snap-align: center; }
+.dialog-photo > span { position: absolute; right: 13px; bottom: 13px; z-index: 2; padding: 6px 9px; border-radius: 999px; color: white; background: rgba(2,20,29,.72); font-size: 11px; font-weight: 850; backdrop-filter: blur(7px); }
+.dialog-media img { width: 100%; max-height: 56dvh; object-fit: cover; }
 .dialog-body { padding: 20px; }
 .dialog-body h2 { font-size: 28px; }
 .dialog-primary { margin-top: 6px; color: var(--gold); font-size: 21px; font-weight: 900; }
+.fish-details { display: grid; gap: 7px; margin-top: 16px; }
+.fish-detail { display: grid; grid-template-columns: 27px 1fr auto; align-items: center; gap: 9px; padding: 10px; border: 1px solid var(--line); border-radius: 15px; background: rgba(255,255,255,.035); }
+.fish-detail > span { display: grid; place-items: center; width: 25px; height: 25px; border-radius: 9px; color: var(--accent-text); background: var(--accent); font-size: 11px; font-weight: 900; }
+.fish-detail small { display: block; margin-top: 3px; color: var(--muted); font-size: 10px; }
+.fish-detail > b { color: var(--gold); text-align: right; }
+.fish-detail > b small { color: var(--muted); }
 .detail-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 18px; }
 .detail-grid div { padding: 11px; border-radius: 15px; background: rgba(255,255,255,.045); }
 .detail-grid small { display: block; color: var(--muted); margin-bottom: 4px; }
 .detail-note { margin-top: 14px; padding: 14px; border-left: 3px solid var(--accent); border-radius: 4px 14px 14px 4px; color: #c8dcda; background: rgba(65,199,165,.065); line-height: 1.5; }
+.added-by { margin-top: 14px; color: var(--muted); font-size: 11px; }
 .map-link { display: inline-flex; margin-top: 15px; padding: 10px 13px; border-radius: 13px; color: var(--accent); background: rgba(65,199,165,.09); text-decoration: none; font-weight: 800; font-size: 13px; }
 
 @media (min-width: 620px) {

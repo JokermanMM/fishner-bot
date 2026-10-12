@@ -1,21 +1,28 @@
 export type DraftStep =
   | "media"
   | "count"
+  | "angler"
   | "species"
   | "weight"
   | "length"
   | "location"
   | "waterbody"
-  | "caught_at"
+  | "caught_on"
   | "lure"
   | "disposition"
   | "notes"
   | "preview";
 
-export type MediaType = "photo" | "video";
 export type Disposition = "released" | "kept" | "unknown";
 
+export interface CatchPhotoDraft {
+  telegramFileId: string;
+  telegramFileUniqueId: string;
+}
+
 export interface CatchItemDraft {
+  anglerUserId?: number;
+  anglerName?: string;
   speciesName?: string;
   weightGrams?: number;
   lengthMm?: number;
@@ -25,17 +32,20 @@ export interface CatchDraft {
   fishCount?: number;
   currentFishIndex?: number;
   fishes?: CatchItemDraft[];
-  speciesName?: string;
-  weightGrams?: number;
-  lengthMm?: number;
   latitude?: number;
   longitude?: number;
   waterbody?: string;
-  caughtAt?: string;
+  caughtOn?: string;
   lure?: string;
   disposition?: Disposition;
   notes?: string;
-  mediaType?: MediaType;
+  photos?: CatchPhotoDraft[];
+  // Только для бесшовного чтения старых незавершённых черновиков.
+  speciesName?: string;
+  weightGrams?: number;
+  lengthMm?: number;
+  caughtAt?: string;
+  mediaType?: "photo" | "video";
   telegramFileId?: string;
   telegramFileUniqueId?: string;
 }
@@ -46,23 +56,53 @@ export interface DraftRecord {
   data: CatchDraft;
 }
 
+export interface AnglerOption {
+  id: number;
+  displayName: string;
+  username: string | null;
+}
+
+export interface CatchPhoto {
+  id: string;
+  telegramFileId: string;
+  telegramFileUniqueId: string;
+  position: number;
+}
+
 export interface CatchRecord {
   id: string;
+  sessionId: string;
   userId: number;
   ownerName: string;
+  createdByUserId: number;
+  createdByName: string;
   speciesName: string;
   weightGrams: number;
   lengthMm: number | null;
   latitude: number | null;
   longitude: number | null;
   waterbody: string | null;
-  caughtAt: string;
+  caughtOn: string;
   lure: string | null;
   disposition: Disposition;
   notes: string | null;
-  mediaType: MediaType | null;
-  telegramFileId: string | null;
-  telegramFileUniqueId: string | null;
+  photos: CatchPhoto[];
+  createdAt: string;
+}
+
+export interface CatchSessionRecord {
+  id: string;
+  createdByUserId: number;
+  createdByName: string;
+  latitude: number | null;
+  longitude: number | null;
+  waterbody: string | null;
+  caughtOn: string;
+  lure: string | null;
+  disposition: Disposition;
+  notes: string | null;
+  photos: CatchPhoto[];
+  fishes: CatchRecord[];
   createdAt: string;
 }
 
@@ -70,7 +110,7 @@ export interface RecordRow {
   speciesName: string;
   ownerName: string;
   weightGrams: number;
-  caughtAt: string;
+  caughtOn: string;
 }
 
 export interface LeaderboardRow {

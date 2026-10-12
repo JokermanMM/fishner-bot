@@ -6,21 +6,22 @@ import type { CatchRecord } from "../src/types.js";
 
 const catchRecord: CatchRecord = {
   id: "00000000-0000-0000-0000-000000000001",
+  sessionId: "00000000-0000-0000-0000-000000000010",
   userId: 1,
   ownerName: "Михаил",
+  createdByUserId: 1,
+  createdByName: "Михаил",
   speciesName: "Щука",
   weightGrams: 5000,
   lengthMm: 825,
   latitude: null,
   longitude: null,
   waterbody: null,
-  caughtAt: "2026-10-07T04:42:00.000Z",
+  caughtOn: "2026-10-07",
   lure: null,
   disposition: "released",
   notes: null,
-  mediaType: null,
-  telegramFileId: null,
-  telegramFileUniqueId: null,
+  photos: [],
   createdAt: "2026-10-07T04:42:00.000Z",
 };
 

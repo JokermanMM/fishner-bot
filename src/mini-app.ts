@@ -23,7 +23,6 @@ const securityHeaders = {
     "script-src 'self' https://telegram.org",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' blob: data: https://*.tile.openstreetmap.org",
-    "media-src 'self' blob:",
     "connect-src 'self'",
     "frame-ancestors https://web.telegram.org https://*.telegram.org",
     "base-uri 'none'",
@@ -81,28 +80,31 @@ export class MiniAppHandler {
     if (request.method === "POST" && url.pathname === "/api/mini-app/bootstrap") {
       const session = await this.authorize(request, response);
       if (!session) return true;
-      const catches = await this.repository.listRecentCatches(250);
+      const sessions = await this.repository.listRecentSessions(250);
       sendJson(response, 200, {
         viewer: {
           id: session.user.id,
           firstName: session.user.first_name,
           ...(session.user.photo_url ? { photoUrl: session.user.photo_url } : {}),
         },
-        catches: catches.map((record) => ({
-          id: record.id,
-          ownerName: record.ownerName,
-          speciesName: record.speciesName,
-          weightGrams: record.weightGrams,
-          lengthMm: record.lengthMm,
-          latitude: record.latitude,
-          longitude: record.longitude,
-          waterbody: record.waterbody,
-          caughtAt: record.caughtAt,
-          lure: record.lure,
-          disposition: record.disposition,
-          notes: record.notes,
-          mediaType: record.mediaType,
-          hasMedia: Boolean(record.mediaType && record.telegramFileId),
+        sessions: sessions.map((session) => ({
+          id: session.id,
+          createdByName: session.createdByName,
+          latitude: session.latitude,
+          longitude: session.longitude,
+          waterbody: session.waterbody,
+          caughtOn: session.caughtOn,
+          lure: session.lure,
+          disposition: session.disposition,
+          notes: session.notes,
+          photos: session.photos.map((photo) => ({ id: photo.id })),
+          fishes: session.fishes.map((fish) => ({
+            id: fish.id,
+            ownerName: fish.ownerName,
+            speciesName: fish.speciesName,
+            weightGrams: fish.weightGrams,
+            lengthMm: fish.lengthMm,
+          })),
         })),
       });
       return true;
@@ -112,14 +114,14 @@ export class MiniAppHandler {
     if (request.method === "GET" && mediaMatch?.[1]) {
       const session = await this.authorize(request, response);
       if (!session) return true;
-      const record = await this.repository.getCatch(mediaMatch[1]);
-      if (!record?.telegramFileId || !record.mediaType) {
+      const photo = await this.repository.getPhoto(mediaMatch[1]);
+      if (!photo) {
         sendJson(response, 404, { error: "Медиа не найдено" });
         return true;
       }
       try {
         const fileResponse = await fetch(
-          `https://api.telegram.org/bot${this.botToken}/getFile?file_id=${encodeURIComponent(record.telegramFileId)}`,
+          `https://api.telegram.org/bot${this.botToken}/getFile?file_id=${encodeURIComponent(photo.telegramFileId)}`,
         );
         const file = await fileResponse.json() as TelegramFileResult;
         if (!fileResponse.ok || !file.ok || !file.result?.file_path) throw new Error("Telegram не вернул путь к файлу");
@@ -130,8 +132,7 @@ export class MiniAppHandler {
           ...securityHeaders,
           "cache-control": "private, max-age=3600",
           "content-length": String(content.byteLength),
-          "content-type": download.headers.get("content-type")
-            ?? (record.mediaType === "video" ? "video/mp4" : "image/jpeg"),
+          "content-type": download.headers.get("content-type") ?? "image/jpeg",
         });
         response.end(content);
       } catch (error) {

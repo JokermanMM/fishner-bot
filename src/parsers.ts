@@ -48,26 +48,22 @@ export function parseRussianDate(input: string): string | null {
     декабрь: 12, декабря: 12,
   };
   const trimmed = input.trim().toLocaleLowerCase("ru-RU");
-  const numeric = trimmed.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})(?:\s+(?:в\s+)?(\d{1,2}):(\d{2}))?$/u);
-  const words = trimmed.match(/^(\d{1,2})\s+([а-яё]+)\s+(\d{4})(?:\s*(?:г\.?|года))?(?:\s+в\s+(\d{1,2}):(\d{2}))?$/u);
+  const numeric = trimmed.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/u);
+  const words = trimmed.match(/^(\d{1,2})\s+([а-яё]+)\s+(\d{4})(?:\s*(?:г\.?|года))?$/u);
   if (!numeric && !words) return null;
 
   const match = numeric ?? words;
   if (!match) return null;
-  const [, dayRaw, monthRaw, yearRaw, hourRaw = "12", minuteRaw = "00"] = match;
+  const [, dayRaw, monthRaw, yearRaw] = match;
   const day = Number(dayRaw);
   const month = numeric ? Number(monthRaw) : monthNames[monthRaw ?? ""];
   const year = Number(yearRaw);
-  const hour = Number(hourRaw);
-  const minute = Number(minuteRaw);
-
   if (
-    month == null || year < 1900 || year > 2200 || month < 1 || month > 12 || day < 1 || day > 31 ||
-    hour < 0 || hour > 23 || minute < 0 || minute > 59
+    month == null || year < 1900 || year > 2200 || month < 1 || month > 12 || day < 1 || day > 31
   ) return null;
 
-  const iso = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00+03:00`;
-  const date = new Date(iso);
+  const iso = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  const date = new Date(`${iso}T12:00:00.000Z`);
   if (Number.isNaN(date.getTime())) return null;
 
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -78,7 +74,7 @@ export function parseRussianDate(input: string): string | null {
   }).formatToParts(date);
   const actual = Object.fromEntries(parts.map((part) => [part.type, part.value]));
   if (Number(actual.year) !== year || Number(actual.month) !== month || Number(actual.day) !== day) return null;
-  return date.toISOString();
+  return iso;
 }
 
 export function normalizeSpeciesName(input: string): string | null {
