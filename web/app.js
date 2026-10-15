@@ -219,7 +219,15 @@
       </div>
       ${session.notes ? `<div class="detail-note">${escapeHtml(session.notes)}</div>` : ""}
       <div class="added-by">Запись добавил: ${escapeHtml(session.createdByName)}</div>
-      ${session.latitude != null && session.longitude != null ? `<a class="map-link" href="https://www.openstreetmap.org/?mlat=${session.latitude}&mlon=${session.longitude}#map=15/${session.latitude}/${session.longitude}" target="_blank" rel="noreferrer">⌖ Открыть точную точку</a>` : ""}`;
+      <div class="detail-actions">
+        <a class="manage-link" href="https://t.me/fishner_bot?start=manage_${session.id}">✎ Управлять уловом</a>
+        ${session.latitude != null && session.longitude != null ? `<a class="map-link" href="https://www.openstreetmap.org/?mlat=${session.latitude}&mlon=${session.longitude}#map=15/${session.latitude}/${session.longitude}" target="_blank" rel="noreferrer">⌖ Открыть точную точку</a>` : ""}
+      </div>`;
+    elements.dialogBody.querySelector(".manage-link")?.addEventListener("click", (event) => {
+      if (!telegram?.openTelegramLink) return;
+      event.preventDefault();
+      telegram.openTelegramLink(`https://t.me/fishner_bot?start=manage_${session.id}`);
+    });
     elements.dialog.showModal(); telegram?.HapticFeedback?.impactOccurred("light");
   }
 

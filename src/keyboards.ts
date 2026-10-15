@@ -1,5 +1,5 @@
 import { InlineKeyboard, Keyboard } from "grammy";
-import type { AnglerOption, CatchLeaderboardMetric, Disposition } from "./types.js";
+import type { AnglerOption, CatchLeaderboardMetric, CatchSessionRecord, Disposition } from "./types.js";
 
 export const labels = {
   add: "➕ Добавить улов",
@@ -146,10 +146,74 @@ export function filterPickerKeyboard(
     .text("📊 Рейтинг рыбаков", "rank:overview");
 }
 
-export function savedCatchKeyboard(id: string, showLocation = false): InlineKeyboard {
-  const keyboard = new InlineKeyboard().switchInline("📤 Поделиться", `catch:${id}`);
+export function savedCatchKeyboard(id: string, sessionId: string, showLocation = false): InlineKeyboard {
+  const keyboard = new InlineKeyboard()
+    .switchInline("📤 Поделиться", `catch:${id}`)
+    .text("✏️ Управлять", `m:s:${sessionId}`);
   if (showLocation) {
     keyboard.row().text("🗺 Точка улова", `catch:location:${id}`);
   }
   return keyboard;
+}
+
+export function managementKeyboard(session: CatchSessionRecord): InlineKeyboard {
+  const keyboard = new InlineKeyboard()
+    .text("📅 Дата", `m:d:${session.id}`)
+    .text("📍 Место", `m:l:${session.id}`)
+    .row()
+    .text(`📷 Фотографии · ${session.photos.length}`, `m:p:${session.id}`)
+    .row();
+  session.fishes.forEach((fish, index) => keyboard.text(`🐟 ${index + 1}. ${fish.speciesName}`, `m:f:${fish.id}`).row());
+  return keyboard.text("🗑 Удалить весь улов", `m:sd:${session.id}`).row().text("✅ Готово", "m:done");
+}
+
+export function fishManagementKeyboard(fishId: string, sessionId: string): InlineKeyboard {
+  return new InlineKeyboard()
+    .text("🐟 Вид", `m:fs:${fishId}`)
+    .text("👤 Рыбак", `m:fa:${fishId}`)
+    .row()
+    .text("⚖️ Вес", `m:fw:${fishId}`)
+    .text("📏 Длина", `m:fl:${fishId}`)
+    .row()
+    .text("🗑 Удалить рыбу", `m:fd:${fishId}`)
+    .row()
+    .text("← К улову", `m:s:${sessionId}`);
+}
+
+export function sessionDeleteConfirmationKeyboard(sessionId: string): InlineKeyboard {
+  return new InlineKeyboard()
+    .text("🗑 Да, удалить улов", `m:sdx:${sessionId}`)
+    .row()
+    .text("← Не удалять", `m:s:${sessionId}`);
+}
+
+export function fishDeleteConfirmationKeyboard(fishId: string, sessionId: string): InlineKeyboard {
+  return new InlineKeyboard()
+    .text("🗑 Да, удалить рыбу", `m:fdx:${fishId}`)
+    .row()
+    .text("← Не удалять", `m:f:${fishId}`)
+    .text("К улову", `m:s:${sessionId}`);
+}
+
+export function photoManagementKeyboard(session: CatchSessionRecord): InlineKeyboard {
+  return new InlineKeyboard()
+    .text("➕ Добавить фотографии", `m:pa:${session.id}`)
+    .row()
+    .text("← К улову", `m:s:${session.id}`);
+}
+
+export function photoItemKeyboard(photoId: string, sessionId: string, isCover: boolean): InlineKeyboard {
+  const keyboard = new InlineKeyboard();
+  if (!isCover) keyboard.text("⭐ Сделать обложкой", `m:pc:${photoId}`).row();
+  return keyboard
+    .text("🗑 Удалить фото", `m:pd:${photoId}`)
+    .row()
+    .text("← К фотографиям", `m:p:${sessionId}`);
+}
+
+export function photoDeleteConfirmationKeyboard(photoId: string, sessionId: string): InlineKeyboard {
+  return new InlineKeyboard()
+    .text("🗑 Да, удалить фото", `m:pdx:${photoId}`)
+    .row()
+    .text("← Не удалять", `m:p:${sessionId}`);
 }

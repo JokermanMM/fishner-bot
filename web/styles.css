@@ -163,7 +163,9 @@ select { width: 100%; min-width: 0; padding: 11px 32px 11px 12px; border: 1px so
 .detail-grid small { display: block; color: var(--muted); margin-bottom: 4px; }
 .detail-note { margin-top: 14px; padding: 14px; border-left: 3px solid var(--accent); border-radius: 4px 14px 14px 4px; color: #c8dcda; background: rgba(65,199,165,.065); line-height: 1.5; }
 .added-by { margin-top: 14px; color: var(--muted); font-size: 11px; }
-.map-link { display: inline-flex; margin-top: 15px; padding: 10px 13px; border-radius: 13px; color: var(--accent); background: rgba(65,199,165,.09); text-decoration: none; font-weight: 800; font-size: 13px; }
+.detail-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 15px; }
+.map-link, .manage-link { display: inline-flex; padding: 10px 13px; border-radius: 13px; color: var(--accent); background: rgba(65,199,165,.09); text-decoration: none; font-weight: 800; font-size: 13px; }
+.manage-link { color: #092720; background: linear-gradient(135deg, var(--accent), #80dfc8); box-shadow: 0 7px 18px rgba(65,199,165,.16); }
 
 @media (min-width: 620px) {
   .shell { padding-inline: 20px; }

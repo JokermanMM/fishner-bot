@@ -1,14 +1,18 @@
-import { Bot, Context, InlineKeyboard, InlineQueryResultBuilder } from "grammy";
+import { Bot, Context, InlineKeyboard, InlineQueryResultBuilder, Keyboard } from "grammy";
 import type { InlineQueryResult } from "grammy/types";
 import { FishingRepository } from "./db.js";
 import { isMessageNotModified, safeErrorMessage } from "./errors.js";
 import {
+  escapeHtml,
   formatBatchDraftCard,
   formatCatchLeaderboard,
+  formatDate,
   formatLeaderboard,
+  formatLength,
   formatRecords,
   formatSessionCard,
   formatSharedCard,
+  formatWeight,
 } from "./format.js";
 import {
   anglerButtonLabel,
@@ -17,14 +21,21 @@ import {
   dateKeyboard,
   dispositionKeyboard,
   filterPickerKeyboard,
+  fishDeleteConfirmationKeyboard,
+  fishManagementKeyboard,
   labels,
   locationKeyboard,
   mainKeyboard,
+  managementKeyboard,
   parseDisposition,
   photoKeyboard,
+  photoDeleteConfirmationKeyboard,
+  photoItemKeyboard,
+  photoManagementKeyboard,
   previousLocationButtonLabel,
   previewKeyboard,
   savedCatchKeyboard,
+  sessionDeleteConfirmationKeyboard,
   skipKeyboard,
   statsKeyboard,
 } from "./keyboards.js";
@@ -37,6 +48,7 @@ import type {
   CatchSessionRecord,
   DraftRecord,
   DraftStep,
+  ManagementDraft,
 } from "./types.js";
 
 const privateOnly = "🎣 Добавление улова доступно в личном чате с ботом. Так точная геопозиция останется приватной.";
@@ -161,6 +173,201 @@ async function showPreview(ctx: Context, repository: FishingRepository, draft: D
   }
 }
 
+async function showManagement(ctx: Context, repository: FishingRepository, sessionId: string): Promise<void> {
+  const session = await repository.getSession(sessionId);
+  if (!session) {
+    await ctx.reply("Этот улов уже удалён или не найден.");
+    return;
+  }
+  await ctx.reply(`✏️ <b>Управление уловом</b>\n\n${formatSessionCard(session)}`, {
+    parse_mode: "HTML",
+    reply_markup: managementKeyboard(session),
+  });
+}
+
+async function showFishManagement(ctx: Context, repository: FishingRepository, fishId: string): Promise<void> {
+  const fish = await repository.getCatch(fishId);
+  if (!fish) {
+    await ctx.reply("Эта рыба уже удалена или не найдена.");
+    return;
+  }
+  const details = [
+    "🐟 <b>Управление рыбой</b>",
+    "",
+    `<b>${escapeHtml(fish.speciesName)}</b>`,
+    `👤 ${escapeHtml(fish.ownerName)}`,
+    `⚖️ ${formatWeight(fish.weightGrams)}${fish.lengthMm == null ? "" : ` · 📏 ${formatLength(fish.lengthMm)}`}`,
+    `📅 ${formatDate(fish.caughtOn)}`,
+  ].join("\n");
+  await ctx.reply(details, { parse_mode: "HTML", reply_markup: fishManagementKeyboard(fish.id, fish.sessionId) });
+}
+
+async function showPhotoManagement(ctx: Context, repository: FishingRepository, sessionId: string): Promise<void> {
+  const session = await repository.getSession(sessionId);
+  if (!session) {
+    await ctx.reply("Этот улов уже удалён или не найден.");
+    return;
+  }
+  await ctx.reply(`📷 <b>Фотографии улова</b>\n\nСейчас: ${session.photos.length} из 10. Первая фотография используется как обложка.`, {
+    parse_mode: "HTML",
+    reply_markup: photoManagementKeyboard(session),
+  });
+  for (const [index, photo] of session.photos.entries()) {
+    await ctx.replyWithPhoto(photo.telegramFileId, {
+      caption: index === 0 ? `⭐ Обложка · фото 1 из ${session.photos.length}` : `Фото ${index + 1} из ${session.photos.length}`,
+      reply_markup: photoItemKeyboard(photo.id, session.id, index === 0),
+    });
+  }
+}
+
+async function beginManagementEdit(
+  ctx: Context,
+  repository: FishingRepository,
+  userId: number,
+  draft: Omit<ManagementDraft, "userId" | "data"> & { data?: ManagementDraft["data"] },
+  prompt: string,
+  replyMarkup?: Keyboard,
+): Promise<void> {
+  await repository.clearDraft(userId);
+  await repository.setManagementDraft(userId, draft.step, draft.sessionId, draft.fishId, draft.data ?? {});
+  await ctx.reply(prompt, { parse_mode: "HTML", ...(replyMarkup ? { reply_markup: replyMarkup } : {}) });
+}
+
+async function resolveAngler(
+  repository: FishingRepository,
+  userId: number,
+  text: string | undefined,
+): Promise<AnglerOption | null> {
+  if (!text) return null;
+  const anglers = await repository.listApprovedUsers();
+  if (text === labels.me) return anglers.find((item) => item.id === userId) ?? null;
+  const selected = anglers.find((item) => anglerButtonLabel(item) === text);
+  if (selected) return selected;
+  return text.startsWith("@") ? repository.findApprovedUserByUsername(text) : null;
+}
+
+function editLocationKeyboard(): Keyboard {
+  return new Keyboard()
+    .requestLocation("📍 Отправить новую геопозицию")
+    .row()
+    .text(labels.cancel)
+    .resized()
+    .oneTime();
+}
+
+async function handleManagementInput(
+  ctx: Context,
+  repository: FishingRepository,
+  userId: number,
+  draft: ManagementDraft,
+  timeZone: string,
+  homeKeyboard: Keyboard,
+): Promise<void> {
+  const text = ctx.message?.text?.trim();
+  const finish = async (message: string, sessionId = draft.sessionId): Promise<void> => {
+    await repository.clearManagementDraft(userId);
+    await ctx.reply(message, { reply_markup: homeKeyboard });
+    await showManagement(ctx, repository, sessionId);
+  };
+
+  switch (draft.step) {
+    case "session_date": {
+      const date = text === labels.today
+        ? dateInTimeZone(timeZone)
+        : text === labels.yesterday
+          ? dateInTimeZone(timeZone, -1)
+          : text ? parseRussianDate(text) : null;
+      if (!date) {
+        await ctx.reply("Не распознал дату. Введите, например, <b>27.10.2026</b> или <b>27 октября 2026 г.</b>", { parse_mode: "HTML", reply_markup: dateKeyboard() });
+        return;
+      }
+      if (!await repository.updateSessionDate(draft.sessionId, date)) { await finish("Улов уже удалён или не найден."); return; }
+      await finish(`✅ Дата изменена: ${formatDate(date)}.`);
+      return;
+    }
+    case "session_location": {
+      const location = ctx.message?.location;
+      if (location) {
+        await repository.setManagementDraft(userId, "session_waterbody", draft.sessionId, null, {
+          latitude: location.latitude,
+          longitude: location.longitude,
+        });
+        await ctx.reply("🌊 Как называется новое место? Можно пропустить и сохранить прежнее название.", { reply_markup: skipKeyboard() });
+        return;
+      }
+      if (!text || text.length > 120) {
+        await ctx.reply("Отправьте новую геопозицию или напишите название места до 120 символов.", { reply_markup: editLocationKeyboard() });
+        return;
+      }
+      if (!await repository.updateSessionWaterbody(draft.sessionId, text)) { await finish("Улов уже удалён или не найден."); return; }
+      await finish("✅ Название места изменено.");
+      return;
+    }
+    case "session_waterbody": {
+      if (draft.data.latitude == null || draft.data.longitude == null) { await finish("Не удалось найти новую геопозицию. Попробуйте ещё раз."); return; }
+      const session = await repository.getSession(draft.sessionId);
+      if (!session) { await finish("Улов уже удалён или не найден."); return; }
+      const waterbody = text === labels.skip ? session.waterbody : text;
+      if (waterbody != null && (!waterbody || waterbody.length > 120)) {
+        await ctx.reply("Название места должно быть короче 120 символов.", { reply_markup: skipKeyboard() });
+        return;
+      }
+      await repository.updateSessionLocation(draft.sessionId, draft.data.latitude, draft.data.longitude, waterbody ?? null);
+      await finish("✅ Геопозиция улова изменена.");
+      return;
+    }
+    case "fish_species": {
+      const species = text ? normalizeSpeciesName(text) : null;
+      if (!species) {
+        await ctx.reply("Введите только название рыбы буквами, например <b>щука</b> или <b>белый амур</b>. Вес вводится отдельно.", { parse_mode: "HTML" });
+        return;
+      }
+      if (!draft.fishId || !await repository.updateFishSpecies(draft.fishId, species)) { await finish("Рыба уже удалена или не найдена."); return; }
+      await finish(`✅ Вид изменён: ${escapeHtml(species)}.`);
+      return;
+    }
+    case "fish_weight": {
+      const weight = text ? parseWeightGrams(text) : null;
+      if (!weight) { await ctx.reply("Не распознал вес. Например: <b>4,85 кг</b> или <b>850 г</b>.", { parse_mode: "HTML" }); return; }
+      if (!draft.fishId || !await repository.updateFishWeight(draft.fishId, weight)) { await finish("Рыба уже удалена или не найдена."); return; }
+      await finish(`✅ Вес изменён: ${formatWeight(weight)}.`);
+      return;
+    }
+    case "fish_length": {
+      const length = text === labels.skip ? null : text ? parseLengthMm(text) : null;
+      if (text !== labels.skip && !length) { await ctx.reply("Не распознал длину. Например: <b>72 см</b>. Кнопка «Пропустить» удалит длину.", { parse_mode: "HTML", reply_markup: skipKeyboard() }); return; }
+      if (!draft.fishId || !await repository.updateFishLength(draft.fishId, length)) { await finish("Рыба уже удалена или не найдена."); return; }
+      await finish(length == null ? "✅ Длина удалена." : `✅ Длина изменена: ${formatLength(length)}.`);
+      return;
+    }
+    case "fish_angler": {
+      const angler = await resolveAngler(repository, userId, text);
+      if (!angler) { await ctx.reply("Не нашёл этого рыбака среди допущенных участников. Выберите кнопку или отправьте @username."); return; }
+      if (!draft.fishId || !await repository.updateFishAngler(draft.fishId, angler.id)) { await finish("Рыба уже удалена или не найдена."); return; }
+      await finish(`✅ Рыбак изменён: ${escapeHtml(angler.displayName)}.`);
+      return;
+    }
+    case "photo_add": {
+      if (ctx.message?.video) { await ctx.reply("Видео не поддерживается — пришлите фотографию.", { reply_markup: photoKeyboard() }); return; }
+      if (text === labels.photosDone) {
+        await repository.clearManagementDraft(userId);
+        await ctx.reply("✅ Работа с фотографиями завершена.", { reply_markup: homeKeyboard });
+        await showPhotoManagement(ctx, repository, draft.sessionId);
+        return;
+      }
+      const photo = ctx.message?.photo?.at(-1);
+      if (!photo) { await ctx.reply("Пришлите фото или нажмите «Фото добавлены».", { reply_markup: photoKeyboard() }); return; }
+      const result = await repository.addPhoto(draft.sessionId, photo.file_id, photo.file_unique_id);
+      const message = result === "added" ? "📷 Фотография добавлена. Можно прислать ещё."
+        : result === "duplicate" ? "Эта фотография уже есть в улове."
+          : result === "limit" ? "В улове уже 10 фотографий — это максимум."
+            : "Улов уже удалён или не найден.";
+      await ctx.reply(message, { reply_markup: photoKeyboard() });
+      return;
+    }
+  }
+}
+
 function metricFromToken(token: string | undefined): CatchLeaderboardMetric {
   return token === "l" ? "length" : "weight";
 }
@@ -239,13 +446,21 @@ export function createFishingBot(token: string, repository: FishingRepository, t
     if (!user) return;
     if (ctx.match === friendInviteCode) await repository.approveUser(user.id);
     if (!await repository.isApproved(user.id)) { await ctx.reply("🔐 Бот закрыт. Для входа нужна пригласительная ссылка от одного из участников."); return; }
+    const managementMatch = String(ctx.match).match(/^manage_([0-9a-f-]{36})$/u);
+    if (managementMatch?.[1]) {
+      await repository.clearDraft(user.id);
+      await repository.clearManagementDraft(user.id);
+      await showManagement(ctx, repository, managementMatch[1]);
+      return;
+    }
     await ctx.reply("🎣 <b>Наш рыболовный дневник</b>\n\nЗдесь собираются уловы, рекорды и статистика всей компании.\n\nДобавим новый улов?", { parse_mode: "HTML", reply_markup: homeKeyboard() });
   });
 
   bot.command("cancel", async (ctx) => {
     if (!ctx.from) return;
     await repository.clearDraft(ctx.from.id);
-    await ctx.reply("Ввод улова отменён. Данные черновика удалены.", { reply_markup: homeKeyboard() });
+    await repository.clearManagementDraft(ctx.from.id);
+    await ctx.reply("Текущий ввод отменён.", { reply_markup: homeKeyboard() });
   });
 
   bot.callbackQuery("draft:save", async (ctx) => {
@@ -260,7 +475,7 @@ export function createFishingBot(token: string, repository: FishingRepository, t
     await ctx.editMessageReplyMarkup().catch(() => undefined);
     await ctx.reply(`✅ Улов сохранён: ${records.length} рыб, ${session.photos.length} фото${recordIndexes.size ? `, новых рекордов: ${recordIndexes.size}` : ""}.`, { reply_markup: homeKeyboard() });
     const first = records[0];
-    if (first) await sendSessionCard(ctx, session, formatSessionCard(session, recordIndexes), savedCatchKeyboard(first.id, session.latitude != null && session.longitude != null));
+    if (first) await sendSessionCard(ctx, session, formatSessionCard(session, recordIndexes), savedCatchKeyboard(first.id, session.id, session.latitude != null && session.longitude != null));
   });
 
   bot.callbackQuery("draft:edit", async (ctx) => {
@@ -285,6 +500,104 @@ export function createFishingBot(token: string, repository: FishingRepository, t
     const record = ctx.match[1] ? await repository.getCatch(ctx.match[1]) : null;
     if (!record || record.latitude == null || record.longitude == null) { await ctx.reply("Точка этого улова недоступна."); return; }
     await ctx.replyWithLocation(record.latitude, record.longitude);
+  });
+
+  bot.callbackQuery("m:done", async (ctx) => {
+    if (ctx.from) await repository.clearManagementDraft(ctx.from.id);
+    await ctx.reply("✅ Управление уловом завершено.", { reply_markup: homeKeyboard() });
+  });
+  bot.callbackQuery(/^m:s:([0-9a-f-]{36})$/u, async (ctx) => {
+    if (ctx.from) await repository.clearManagementDraft(ctx.from.id);
+    if (ctx.match[1]) await showManagement(ctx, repository, ctx.match[1]);
+  });
+  bot.callbackQuery(/^m:f:([0-9a-f-]{36})$/u, async (ctx) => {
+    if (ctx.from) await repository.clearManagementDraft(ctx.from.id);
+    if (ctx.match[1]) await showFishManagement(ctx, repository, ctx.match[1]);
+  });
+  bot.callbackQuery(/^m:d:([0-9a-f-]{36})$/u, async (ctx) => {
+    const sessionId = ctx.match[1];
+    if (!sessionId) return;
+    await beginManagementEdit(ctx, repository, ctx.from.id, { step: "session_date", sessionId, fishId: null }, "📅 <b>Новая дата улова</b>\n\nВведите <b>27.10.2026</b>, <b>27 октября 2026 г.</b> или выберите кнопку.", dateKeyboard());
+  });
+  bot.callbackQuery(/^m:l:([0-9a-f-]{36})$/u, async (ctx) => {
+    const sessionId = ctx.match[1];
+    if (!sessionId) return;
+    await beginManagementEdit(ctx, repository, ctx.from.id, { step: "session_location", sessionId, fishId: null }, "📍 <b>Изменение места</b>\n\nОтправьте новую геопозицию или просто напишите новое название места.", editLocationKeyboard());
+  });
+  bot.callbackQuery(/^m:fs:([0-9a-f-]{36})$/u, async (ctx) => {
+    const fish = ctx.match[1] ? await repository.getCatch(ctx.match[1]) : null;
+    if (!fish) { await ctx.reply("Рыба уже удалена или не найдена."); return; }
+    await beginManagementEdit(ctx, repository, ctx.from.id, { step: "fish_species", sessionId: fish.sessionId, fishId: fish.id }, `🐟 Текущий вид: <b>${escapeHtml(fish.speciesName)}</b>.\n\nВведите новое название рыбы.`);
+  });
+  bot.callbackQuery(/^m:fw:([0-9a-f-]{36})$/u, async (ctx) => {
+    const fish = ctx.match[1] ? await repository.getCatch(ctx.match[1]) : null;
+    if (!fish) { await ctx.reply("Рыба уже удалена или не найдена."); return; }
+    await beginManagementEdit(ctx, repository, ctx.from.id, { step: "fish_weight", sessionId: fish.sessionId, fishId: fish.id }, `⚖️ Текущий вес: <b>${formatWeight(fish.weightGrams)}</b>.\n\nВведите новый вес.`);
+  });
+  bot.callbackQuery(/^m:fl:([0-9a-f-]{36})$/u, async (ctx) => {
+    const fish = ctx.match[1] ? await repository.getCatch(ctx.match[1]) : null;
+    if (!fish) { await ctx.reply("Рыба уже удалена или не найдена."); return; }
+    await beginManagementEdit(ctx, repository, ctx.from.id, { step: "fish_length", sessionId: fish.sessionId, fishId: fish.id }, `📏 Текущая длина: <b>${fish.lengthMm == null ? "не указана" : formatLength(fish.lengthMm)}</b>.\n\nВведите новую длину или нажмите «Пропустить», чтобы удалить её.`, skipKeyboard());
+  });
+  bot.callbackQuery(/^m:fa:([0-9a-f-]{36})$/u, async (ctx) => {
+    const fish = ctx.match[1] ? await repository.getCatch(ctx.match[1]) : null;
+    if (!fish) { await ctx.reply("Рыба уже удалена или не найдена."); return; }
+    const anglers = await repository.listApprovedUsers();
+    await beginManagementEdit(ctx, repository, ctx.from.id, { step: "fish_angler", sessionId: fish.sessionId, fishId: fish.id }, `👤 Сейчас указан: <b>${escapeHtml(fish.ownerName)}</b>.\n\nВыберите рыбака или отправьте @username.`, anglerKeyboard(anglers, ctx.from.id, false));
+  });
+  bot.callbackQuery(/^m:sd:([0-9a-f-]{36})$/u, async (ctx) => {
+    const session = ctx.match[1] ? await repository.getSession(ctx.match[1]) : null;
+    if (!session) { await ctx.reply("Улов уже удалён или не найден."); return; }
+    await ctx.reply(`⚠️ <b>Удалить весь улов?</b>\n\nБудут удалены ${session.fishes.length} рыб и ${session.photos.length} фото. Это действие нельзя отменить.`, { parse_mode: "HTML", reply_markup: sessionDeleteConfirmationKeyboard(session.id) });
+  });
+  bot.callbackQuery(/^m:sdx:([0-9a-f-]{36})$/u, async (ctx) => {
+    const sessionId = ctx.match[1];
+    if (!sessionId) return;
+    if (ctx.from) await repository.clearManagementDraft(ctx.from.id);
+    const deleted = await repository.deleteSession(sessionId);
+    await ctx.reply(deleted ? "🗑 Улов, все его рыбы и фотографии удалены." : "Улов уже был удалён.", { reply_markup: homeKeyboard() });
+  });
+  bot.callbackQuery(/^m:fd:([0-9a-f-]{36})$/u, async (ctx) => {
+    const fish = ctx.match[1] ? await repository.getCatch(ctx.match[1]) : null;
+    if (!fish) { await ctx.reply("Рыба уже удалена или не найдена."); return; }
+    const session = await repository.getSession(fish.sessionId);
+    const warning = session?.fishes.length === 1 ? "\n\nЭто единственная рыба: вместе с ней удалятся весь улов и его фото." : "";
+    await ctx.reply(`⚠️ Удалить <b>${escapeHtml(fish.speciesName)}</b> · ${formatWeight(fish.weightGrams)}?${warning}`, { parse_mode: "HTML", reply_markup: fishDeleteConfirmationKeyboard(fish.id, fish.sessionId) });
+  });
+  bot.callbackQuery(/^m:fdx:([0-9a-f-]{36})$/u, async (ctx) => {
+    const result = ctx.match[1] ? await repository.deleteFish(ctx.match[1]) : { deleted: false, sessionId: null, sessionDeleted: false };
+    if (ctx.from) await repository.clearManagementDraft(ctx.from.id);
+    if (!result.deleted || !result.sessionId) { await ctx.reply("Рыба уже была удалена.", { reply_markup: homeKeyboard() }); return; }
+    if (result.sessionDeleted) { await ctx.reply("🗑 Рыба и оставшийся пустым улов удалены.", { reply_markup: homeKeyboard() }); return; }
+    await ctx.reply("🗑 Рыба удалена из группового улова.", { reply_markup: homeKeyboard() });
+    await showManagement(ctx, repository, result.sessionId);
+  });
+  bot.callbackQuery(/^m:p:([0-9a-f-]{36})$/u, async (ctx) => {
+    if (ctx.from) await repository.clearManagementDraft(ctx.from.id);
+    if (ctx.match[1]) await showPhotoManagement(ctx, repository, ctx.match[1]);
+  });
+  bot.callbackQuery(/^m:pa:([0-9a-f-]{36})$/u, async (ctx) => {
+    const sessionId = ctx.match[1];
+    if (!sessionId) return;
+    await beginManagementEdit(ctx, repository, ctx.from.id, { step: "photo_add", sessionId, fishId: null }, "📷 Пришлите до 10 фотографий альбомом или по одной. Дубли не сохраняются.", photoKeyboard());
+  });
+  bot.callbackQuery(/^m:pc:([0-9a-f-]{36})$/u, async (ctx) => {
+    const sessionId = ctx.match[1] ? await repository.setCoverPhoto(ctx.match[1]) : null;
+    if (!sessionId) { await ctx.reply("Фотография уже удалена или не найдена."); return; }
+    await ctx.reply("⭐ Обложка изменена.");
+    await showPhotoManagement(ctx, repository, sessionId);
+  });
+  bot.callbackQuery(/^m:pd:([0-9a-f-]{36})$/u, async (ctx) => {
+    const photo = ctx.match[1] ? await repository.getPhoto(ctx.match[1]) : null;
+    if (!photo) { await ctx.reply("Фотография уже удалена или не найдена."); return; }
+    await ctx.reply("⚠️ <b>Удалить эту фотографию?</b>\n\nДействие нельзя отменить.", { parse_mode: "HTML", reply_markup: photoDeleteConfirmationKeyboard(photo.id, photo.sessionId) });
+  });
+  bot.callbackQuery(/^m:pdx:([0-9a-f-]{36})$/u, async (ctx) => {
+    const result = ctx.match[1] ? await repository.deletePhoto(ctx.match[1]) : { deleted: false, sessionId: null };
+    if (!result.sessionId) { await ctx.reply("Фотография уже была удалена."); return; }
+    if (result.reason === "last") { await ctx.reply("Нельзя удалить единственную фотографию: у улова должна остаться хотя бы одна."); await showPhotoManagement(ctx, repository, result.sessionId); return; }
+    await ctx.reply("🗑 Фотография удалена.");
+    await showPhotoManagement(ctx, repository, result.sessionId);
   });
 
   bot.callbackQuery("rank:overview", async (ctx) => updateStatsMessage(ctx, formatLeaderboard(await repository.listLeaderboard()), statsKeyboard()));
@@ -317,9 +630,15 @@ export function createFishingBot(token: string, repository: FishingRepository, t
     const user = currentUser(ctx);
     if (!user || ctx.chat.type !== "private") return;
     const text = ctx.message.text?.trim();
-    if (text === labels.cancel) { await repository.clearDraft(user.id); await ctx.reply("Ввод улова отменён.", { reply_markup: homeKeyboard() }); return; }
+    if (text === labels.cancel) {
+      await repository.clearDraft(user.id);
+      await repository.clearManagementDraft(user.id);
+      await ctx.reply("Текущий ввод отменён.", { reply_markup: homeKeyboard() });
+      return;
+    }
 
     if (text === labels.add) {
+      await repository.clearManagementDraft(user.id);
       const data: CatchDraft = { caughtOn: dateInTimeZone(timeZone), disposition: "unknown", photos: [], fishes: [], currentFishIndex: 0 };
       await repository.setDraft(user.id, "media", data);
       await sendPrompt(ctx, repository, user.id, "media", data);
@@ -334,13 +653,19 @@ export function createFishingBot(token: string, repository: FishingRepository, t
         const recordFlags = new Set<number>();
         for (const [index, fish] of session.fishes.entries()) if (await repository.isRecord(fish)) recordFlags.add(index);
         const first = session.fishes[0];
-        await sendSessionCard(ctx, session, formatSessionCard(session, recordFlags), first ? savedCatchKeyboard(first.id, session.latitude != null && session.longitude != null) : undefined);
+        await sendSessionCard(ctx, session, formatSessionCard(session, recordFlags), first ? savedCatchKeyboard(first.id, session.id, session.latitude != null && session.longitude != null) : undefined);
       }
       return;
     }
     if (text === labels.records) { await ctx.reply(formatRecords(await repository.listRecords(), timeZone), { parse_mode: "HTML", reply_markup: homeKeyboard() }); return; }
     if (text === labels.stats) {
       await ctx.reply(formatCatchLeaderboard(await repository.listTopCatches({ metric: "weight" }), "weight", "Все рыбы"), { parse_mode: "HTML", reply_markup: catchLeaderboardKeyboard("all", "weight") });
+      return;
+    }
+
+    const managementDraft = await repository.getManagementDraft(user.id);
+    if (managementDraft) {
+      await handleManagementInput(ctx, repository, user.id, managementDraft, timeZone, homeKeyboard());
       return;
     }
 
@@ -449,7 +774,9 @@ export function createFishingBot(token: string, repository: FishingRepository, t
     if (!valid) {
       const message = draft.step === "angler"
         ? "Не нашёл этого рыбака среди участников. Он должен сначала открыть бота по пригласительной ссылке."
-        : draft.step === "media" ? "Добавьте хотя бы одну фотографию, затем нажмите «Фото добавлены»." : "Не смог распознать значение. Попробуйте ещё раз 👇";
+        : draft.step === "species"
+          ? "Введите только название рыбы буквами, например «щука» или «белый амур». Вес вводится на следующем шаге."
+          : draft.step === "media" ? "Добавьте хотя бы одну фотографию, затем нажмите «Фото добавлены»." : "Не смог распознать значение. Попробуйте ещё раз 👇";
       await ctx.reply(message);
       await sendPrompt(ctx, repository, user.id, draft.step, data);
       return;

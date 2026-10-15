@@ -33,5 +33,10 @@ test("дата проверяет календарные значения", () =
 
 test("вид рыбы нормализуется", () => {
   assert.equal(normalizeSpeciesName("  ЩУКА "), "Щука");
+  assert.equal(normalizeSpeciesName("Белый амур"), "Белый амур");
+  assert.equal(normalizeSpeciesName("Ёрш-носарь"), "Ёрш-носарь");
+  assert.equal(normalizeSpeciesName("500 г"), null);
+  assert.equal(normalizeSpeciesName("4,2 кг"), null);
+  assert.equal(normalizeSpeciesName("Щука 500"), null);
   assert.equal(normalizeSpeciesName(" "), null);
 });

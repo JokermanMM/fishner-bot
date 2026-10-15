@@ -180,6 +180,81 @@ test("автор записи и настоящий рыбак хранятся 
   await repository.close();
 });
 
+test("уловом, рыбами и фотографиями можно управлять без SQL", async () => {
+  const repository = await createRepository();
+  await repository.upsertUser(1, "Михаил");
+  await repository.upsertUser(2, "Андрей");
+  await repository.approveUser(1);
+  await repository.approveUser(2);
+
+  const saved = await repository.createCatchBatch(1, {
+    caughtOn: "2026-10-07",
+    disposition: "released",
+    waterbody: "Старое озеро",
+    latitude: 55.1,
+    longitude: 37.1,
+    photos: [
+      { telegramFileId: "photo-a", telegramFileUniqueId: "unique-a" },
+      { telegramFileId: "photo-b", telegramFileUniqueId: "unique-b" },
+    ],
+    fishes: [
+      { anglerUserId: 1, anglerName: "Михаил", speciesName: "Щука", weightGrams: 3000, lengthMm: 700 },
+      { anglerUserId: 1, anglerName: "Михаил", speciesName: "Окунь", weightGrams: 800 },
+    ],
+  });
+  const first = saved[0]?.record;
+  const second = saved[1]?.record;
+  assert.ok(first && second);
+
+  await repository.setManagementDraft(1, "fish_weight", first.sessionId, first.id);
+  assert.equal((await repository.getManagementDraft(1))?.fishId, first.id);
+  await repository.clearManagementDraft(1);
+  assert.equal(await repository.getManagementDraft(1), null);
+
+  assert.equal(await repository.updateSessionDate(first.sessionId, "2026-10-15"), true);
+  assert.equal(await repository.updateSessionWaterbody(first.sessionId, "Новое озеро"), true);
+  assert.equal(await repository.updateSessionLocation(first.sessionId, 56.2, 38.2, "Точка у моста"), true);
+  assert.equal(await repository.updateFishSpecies(first.id, "Судак"), true);
+  assert.equal(await repository.updateFishWeight(first.id, 4200), true);
+  assert.equal(await repository.updateFishLength(first.id, null), true);
+  assert.equal(await repository.updateFishAngler(first.id, 2), true);
+
+  const edited = await repository.getCatch(first.id);
+  assert.equal(edited?.caughtOn, "2026-10-15");
+  assert.equal(edited?.waterbody, "Точка у моста");
+  assert.equal(edited?.speciesName, "Судак");
+  assert.equal(edited?.weightGrams, 4200);
+  assert.equal(edited?.lengthMm, null);
+  assert.equal(edited?.ownerName, "Андрей");
+
+  assert.equal(await repository.addPhoto(first.sessionId, "photo-a-copy", "unique-a"), "duplicate");
+  assert.equal(await repository.addPhoto(first.sessionId, "photo-c", "unique-c"), "added");
+  let session = await repository.getSession(first.sessionId);
+  const lastPhoto = session?.photos.at(-1);
+  assert.ok(lastPhoto);
+  assert.equal(await repository.setCoverPhoto(lastPhoto.id), first.sessionId);
+  session = await repository.getSession(first.sessionId);
+  assert.equal(session?.photos[0]?.id, lastPhoto.id);
+
+  const deletedPhoto = session?.photos[1];
+  assert.ok(deletedPhoto);
+  assert.equal((await repository.deletePhoto(deletedPhoto.id)).deleted, true);
+  session = await repository.getSession(first.sessionId);
+  const anotherPhoto = session?.photos[1];
+  assert.ok(anotherPhoto);
+  assert.equal((await repository.deletePhoto(anotherPhoto.id)).deleted, true);
+  const onlyPhoto = (await repository.getSession(first.sessionId))?.photos[0];
+  assert.ok(onlyPhoto);
+  assert.equal((await repository.deletePhoto(onlyPhoto.id)).reason, "last");
+
+  const deletedFish = await repository.deleteFish(second.id);
+  assert.deepEqual(deletedFish, { deleted: true, sessionId: first.sessionId, sessionDeleted: false });
+  assert.equal((await repository.getSession(first.sessionId))?.fishes.length, 1);
+  assert.equal(await repository.deleteSession(first.sessionId), true);
+  assert.equal(await repository.getSession(first.sessionId), null);
+  await repository.close();
+});
+
 test("миграция объединяет старый пакет рыб в один улов с одной фотографией", async () => {
   const memoryDb = newDb({ autoCreateForeignKeyIndices: true, noAstCoverageCheck: true });
   const adapter = memoryDb.adapters.createPg();

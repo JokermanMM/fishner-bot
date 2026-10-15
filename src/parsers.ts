@@ -80,5 +80,7 @@ export function parseRussianDate(input: string): string | null {
 export function normalizeSpeciesName(input: string): string | null {
   const cleaned = input.trim().replace(/\s+/gu, " ");
   if (cleaned.length < 2 || cleaned.length > 80) return null;
+  if (!/^\p{L}[\p{L}\s-]*$/u.test(cleaned)) return null;
+  if ((cleaned.match(/\p{L}/gu) ?? []).length < 2) return null;
   return cleaned.charAt(0).toLocaleUpperCase("ru-RU") + cleaned.slice(1).toLocaleLowerCase("ru-RU");
 }

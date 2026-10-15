@@ -12,7 +12,9 @@ This repository contains the private Telegram bot `@fishner_bot`, a fishing jour
 - An angler may be selected from approved members or resolved by `@username`; persistent ownership always uses immutable Telegram user ID and cards show the Telegram display name.
 - One entry session contains 1–20 fish and 1–10 photos. Photos, location, waterbody, date, lure, disposition, and notes are shared; angler, species, weight, and length are stored per fish.
 - Photos are stored once per catch session and deduplicated within the session by Telegram `file_unique_id`. Video is not supported.
+- Species input accepts letters, spaces, and hyphens only; values that look like weights or contain digits must be rejected.
 - A batch save is atomic: the session, all photos, and every fish are committed together or none are stored.
+- Every approved member may manage shared catch sessions in the private bot. Deleting a session, one fish, or a photo requires an explicit confirmation; the last photo cannot be deleted.
 - Catch leaderboards support all fish, species, and angler scopes, sorted by weight or length. Length rankings exclude catches without a length.
 - The Statistics entry point opens the global catch leaderboard sorted by weight. Species filters are generated from species already present in catches.
 - Leaderboards show the result and angler without catch date/time. The active metric is visually marked in the inline keyboard.

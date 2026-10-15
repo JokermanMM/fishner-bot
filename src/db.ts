@@ -12,6 +12,9 @@ import type {
   DraftStep,
   LeaderboardFilterOption,
   LeaderboardRow,
+  ManagementDraft,
+  ManagementDraftData,
+  ManagementStep,
   PreviousLocation,
   RecordRow,
 } from "./types.js";
@@ -115,6 +118,7 @@ function mapCatch(row: CatchDbRow, photos: CatchPhoto[] = []): CatchRecord {
 function mapPhoto(row: Record<string, unknown>): CatchPhoto {
   return {
     id: String(row.id),
+    sessionId: String(row.session_id),
     telegramFileId: String(row.telegram_file_id),
     telegramFileUniqueId: String(row.telegram_file_unique_id),
     position: asNumber(row.position as string | number),
@@ -204,6 +208,15 @@ export class FishingRepository {
       CREATE TABLE IF NOT EXISTS drafts (
         user_id BIGINT PRIMARY KEY REFERENCES users(telegram_user_id) ON DELETE CASCADE,
         step TEXT NOT NULL,
+        data_json JSONB NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS management_drafts (
+        user_id BIGINT PRIMARY KEY REFERENCES users(telegram_user_id) ON DELETE CASCADE,
+        step TEXT NOT NULL,
+        session_id UUID NOT NULL REFERENCES catch_sessions(id) ON DELETE CASCADE,
+        fish_id UUID REFERENCES catches(id) ON DELETE CASCADE,
         data_json JSONB NOT NULL,
         updated_at TIMESTAMPTZ NOT NULL
       );
@@ -357,6 +370,50 @@ export class FishingRepository {
     await this.db.query("DELETE FROM drafts WHERE user_id = $1", [userId]);
   }
 
+  async setManagementDraft(
+    userId: number,
+    step: ManagementStep,
+    sessionId: string,
+    fishId: string | null = null,
+    data: ManagementDraftData = {},
+  ): Promise<void> {
+    await this.db.query(`
+      INSERT INTO management_drafts (user_id, step, session_id, fish_id, data_json, updated_at)
+      VALUES ($1, $2, $3, $4, $5::jsonb, $6)
+      ON CONFLICT(user_id) DO UPDATE SET
+        step = EXCLUDED.step,
+        session_id = EXCLUDED.session_id,
+        fish_id = EXCLUDED.fish_id,
+        data_json = EXCLUDED.data_json,
+        updated_at = EXCLUDED.updated_at
+    `, [userId, step, sessionId, fishId, JSON.stringify(data), new Date().toISOString()]);
+  }
+
+  async getManagementDraft(userId: number): Promise<ManagementDraft | null> {
+    const result = await this.db.query(`
+      SELECT user_id, step, session_id, fish_id, data_json
+      FROM management_drafts WHERE user_id = $1
+    `, [userId]);
+    const row = result.rows[0] as {
+      user_id: string | number;
+      step: ManagementStep;
+      session_id: string;
+      fish_id: string | null;
+      data_json: ManagementDraftData;
+    } | undefined;
+    return row ? {
+      userId: asNumber(row.user_id),
+      step: row.step,
+      sessionId: row.session_id,
+      fishId: row.fish_id,
+      data: row.data_json,
+    } : null;
+  }
+
+  async clearManagementDraft(userId: number): Promise<void> {
+    await this.db.query("DELETE FROM management_drafts WHERE user_id = $1", [userId]);
+  }
+
   async listSpecies(_userId: number, limit = 8): Promise<string[]> {
     const result = await this.db.query(`
       SELECT s.name, MAX(cs.created_at) AS last_caught_at
@@ -450,7 +507,7 @@ export class FishingRepository {
           INSERT INTO catch_photos (id, session_id, telegram_file_id, telegram_file_unique_id, position)
           VALUES ($1, $2, $3, $4, $5)
         `, [id, sessionId, photo.telegramFileId, photo.telegramFileUniqueId, position]);
-        savedPhotos.push({ id, telegramFileId: photo.telegramFileId, telegramFileUniqueId: photo.telegramFileUniqueId, position });
+        savedPhotos.push({ id, sessionId, telegramFileId: photo.telegramFileId, telegramFileUniqueId: photo.telegramFileUniqueId, position });
       }
 
       const saved: Array<{ record: CatchRecord; isNewRecord: boolean }> = [];
@@ -612,6 +669,273 @@ export class FishingRepository {
       fishes: fishes.get(row.id) ?? [],
       createdAt: asIso(row.created_at),
     }));
+  }
+
+  async getSession(sessionId: string): Promise<CatchSessionRecord | null> {
+    const sessionResult = await this.db.query(`
+      SELECT cs.*, ${displayNameSql("creator")} AS created_by_name
+      FROM catch_sessions cs
+      JOIN users creator ON creator.telegram_user_id = cs.created_by_user_id
+      WHERE cs.id = $1
+    `, [sessionId]);
+    const row = sessionResult.rows[0] as SessionDbRow | undefined;
+    if (!row) return null;
+    const fishResult = await this.db.query(`${this.catchSelectSql()} WHERE c.session_id = $1 ORDER BY c.id`, [sessionId]);
+    const photos = (await this.photosForSessions([sessionId])).get(sessionId) ?? [];
+    return {
+      id: row.id,
+      createdByUserId: asNumber(row.created_by_user_id),
+      createdByName: row.created_by_name,
+      latitude: row.latitude == null ? null : asNumber(row.latitude),
+      longitude: row.longitude == null ? null : asNumber(row.longitude),
+      waterbody: row.waterbody,
+      caughtOn: asDateOnly(row.caught_on),
+      lure: row.lure,
+      disposition: row.disposition,
+      notes: row.notes,
+      photos,
+      fishes: (fishResult.rows as CatchDbRow[]).map((fish) => mapCatch(fish, photos)),
+      createdAt: asIso(row.created_at),
+    };
+  }
+
+  async updateSessionDate(sessionId: string, caughtOn: string): Promise<boolean> {
+    const result = await this.db.query(`
+      UPDATE catch_sessions SET caught_on = $2 WHERE id = $1 RETURNING id
+    `, [sessionId, caughtOn]);
+    return result.rows.length > 0;
+  }
+
+  async updateSessionLocation(
+    sessionId: string,
+    latitude: number | null,
+    longitude: number | null,
+    waterbody: string | null,
+  ): Promise<boolean> {
+    const result = await this.db.query(`
+      UPDATE catch_sessions
+      SET latitude = $2, longitude = $3, waterbody = $4
+      WHERE id = $1
+      RETURNING id
+    `, [sessionId, latitude, longitude, waterbody]);
+    return result.rows.length > 0;
+  }
+
+  async updateSessionWaterbody(sessionId: string, waterbody: string | null): Promise<boolean> {
+    const result = await this.db.query(`
+      UPDATE catch_sessions SET waterbody = $2 WHERE id = $1 RETURNING id
+    `, [sessionId, waterbody]);
+    return result.rows.length > 0;
+  }
+
+  async updateFishSpecies(fishId: string, speciesName: string): Promise<boolean> {
+    const client = await this.db.connect();
+    try {
+      await client.query("BEGIN");
+      const fish = await client.query("SELECT user_id, species_id FROM catches WHERE id = $1 FOR UPDATE", [fishId]);
+      const row = fish.rows[0];
+      if (!row) { await client.query("ROLLBACK"); return false; }
+      const normalized = speciesName.toLocaleLowerCase("ru-RU");
+      const now = new Date().toISOString();
+      await client.query(`
+        INSERT INTO species (user_id, name, normalized_name, created_at)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT(user_id, normalized_name) DO UPDATE SET name = EXCLUDED.name
+      `, [row.user_id, speciesName, normalized, now]);
+      const target = await client.query("SELECT id FROM species WHERE user_id = $1 AND normalized_name = $2", [row.user_id, normalized]);
+      const speciesId = target.rows[0]?.id;
+      if (speciesId == null) throw new Error("Не удалось сохранить вид рыбы");
+      await client.query("UPDATE catches SET species_id = $2 WHERE id = $1", [fishId, speciesId]);
+      await client.query(`DELETE FROM species WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM catches WHERE species_id = $1)`, [row.species_id]);
+      await client.query("COMMIT");
+      return true;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async updateFishWeight(fishId: string, weightGrams: number): Promise<boolean> {
+    const result = await this.db.query("UPDATE catches SET weight_grams = $2 WHERE id = $1 RETURNING id", [fishId, weightGrams]);
+    return result.rows.length > 0;
+  }
+
+  async updateFishLength(fishId: string, lengthMm: number | null): Promise<boolean> {
+    const result = await this.db.query("UPDATE catches SET length_mm = $2 WHERE id = $1 RETURNING id", [fishId, lengthMm]);
+    return result.rows.length > 0;
+  }
+
+  async updateFishAngler(fishId: string, anglerUserId: number): Promise<boolean> {
+    const client = await this.db.connect();
+    try {
+      await client.query("BEGIN");
+      const approved = await client.query("SELECT 1 AS ok FROM users WHERE telegram_user_id = $1 AND is_approved = TRUE", [anglerUserId]);
+      if (!approved.rows[0]) { await client.query("ROLLBACK"); return false; }
+      const fish = await client.query("SELECT species_id FROM catches WHERE id = $1 FOR UPDATE", [fishId]);
+      const fishRow = fish.rows[0];
+      if (!fishRow) { await client.query("ROLLBACK"); return false; }
+      const species = await client.query("SELECT name, normalized_name FROM species WHERE id = $1", [fishRow.species_id]);
+      const row = species.rows[0];
+      if (!row) throw new Error("Не удалось найти вид рыбы");
+      const now = new Date().toISOString();
+      await client.query(`
+        INSERT INTO species (user_id, name, normalized_name, created_at)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT(user_id, normalized_name) DO UPDATE SET name = EXCLUDED.name
+      `, [anglerUserId, row.name, row.normalized_name, now]);
+      const target = await client.query("SELECT id FROM species WHERE user_id = $1 AND normalized_name = $2", [anglerUserId, row.normalized_name]);
+      const speciesId = target.rows[0]?.id;
+      if (speciesId == null) throw new Error("Не удалось перенести вид рыбы новому рыбаку");
+      await client.query("UPDATE catches SET user_id = $2, species_id = $3 WHERE id = $1", [fishId, anglerUserId, speciesId]);
+      await client.query(`DELETE FROM species WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM catches WHERE species_id = $1)`, [fishRow.species_id]);
+      await client.query("COMMIT");
+      return true;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async deleteSession(sessionId: string): Promise<boolean> {
+    const client = await this.db.connect();
+    try {
+      await client.query("BEGIN");
+      const session = await client.query("SELECT id FROM catch_sessions WHERE id = $1 FOR UPDATE", [sessionId]);
+      if (!session.rows[0]) { await client.query("ROLLBACK"); return false; }
+      const species = await client.query("SELECT DISTINCT species_id FROM catches WHERE session_id = $1", [sessionId]);
+      const deleted = await client.query("DELETE FROM catch_sessions WHERE id = $1 RETURNING id", [sessionId]);
+      if (!deleted.rows[0]) throw new Error("Не удалось удалить улов");
+      for (const row of species.rows) {
+        await client.query(`DELETE FROM species WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM catches WHERE species_id = $1)`, [row.species_id]);
+      }
+      await client.query("COMMIT");
+      return true;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async deleteFish(fishId: string): Promise<{ deleted: boolean; sessionId: string | null; sessionDeleted: boolean }> {
+    const client = await this.db.connect();
+    try {
+      await client.query("BEGIN");
+      const lookup = await client.query("SELECT session_id FROM catches WHERE id = $1", [fishId]);
+      const lookupRow = lookup.rows[0];
+      if (!lookupRow) { await client.query("ROLLBACK"); return { deleted: false, sessionId: null, sessionDeleted: false }; }
+      const sessionId = String(lookupRow.session_id);
+      const session = await client.query("SELECT id FROM catch_sessions WHERE id = $1 FOR UPDATE", [sessionId]);
+      if (!session.rows[0]) { await client.query("ROLLBACK"); return { deleted: false, sessionId: null, sessionDeleted: false }; }
+      const fish = await client.query("SELECT session_id, species_id FROM catches WHERE id = $1 FOR UPDATE", [fishId]);
+      const row = fish.rows[0];
+      if (!row) { await client.query("ROLLBACK"); return { deleted: false, sessionId: null, sessionDeleted: false }; }
+      await client.query("DELETE FROM catches WHERE id = $1", [fishId]);
+      const remaining = await client.query("SELECT 1 AS ok FROM catches WHERE session_id = $1 LIMIT 1", [sessionId]);
+      let sessionDeleted = false;
+      if (!remaining.rows[0]) {
+        await client.query("DELETE FROM catch_sessions WHERE id = $1", [sessionId]);
+        sessionDeleted = true;
+      }
+      await client.query(`DELETE FROM species WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM catches WHERE species_id = $1)`, [row.species_id]);
+      await client.query("COMMIT");
+      return { deleted: true, sessionId, sessionDeleted };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async addPhoto(
+    sessionId: string,
+    telegramFileId: string,
+    telegramFileUniqueId: string,
+  ): Promise<"added" | "duplicate" | "limit" | "missing"> {
+    const client = await this.db.connect();
+    try {
+      await client.query("BEGIN");
+      const session = await client.query("SELECT id FROM catch_sessions WHERE id = $1 FOR UPDATE", [sessionId]);
+      if (!session.rows[0]) { await client.query("ROLLBACK"); return "missing"; }
+      const photos = await client.query("SELECT telegram_file_unique_id, position FROM catch_photos WHERE session_id = $1 ORDER BY position", [sessionId]);
+      if (photos.rows.some((row) => row.telegram_file_unique_id === telegramFileUniqueId)) { await client.query("ROLLBACK"); return "duplicate"; }
+      if (photos.rows.length >= 10) { await client.query("ROLLBACK"); return "limit"; }
+      const position = photos.rows.length ? Math.max(...photos.rows.map((row) => asNumber(row.position as string | number))) + 1 : 0;
+      await client.query(`
+        INSERT INTO catch_photos (id, session_id, telegram_file_id, telegram_file_unique_id, position)
+        VALUES ($1, $2, $3, $4, $5)
+      `, [randomUUID(), sessionId, telegramFileId, telegramFileUniqueId, position]);
+      await client.query("COMMIT");
+      return "added";
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  private async reorderPhotos(client: DatabaseClient, sessionId: string, orderedPhotoIds: string[]): Promise<void> {
+    await client.query("UPDATE catch_photos SET position = position + 1000 WHERE session_id = $1", [sessionId]);
+    for (const [position, id] of orderedPhotoIds.entries()) {
+      await client.query("UPDATE catch_photos SET position = $3 WHERE id = $1 AND session_id = $2", [id, sessionId, position]);
+    }
+  }
+
+  async setCoverPhoto(photoId: string): Promise<string | null> {
+    const client = await this.db.connect();
+    try {
+      await client.query("BEGIN");
+      const selected = await client.query("SELECT session_id FROM catch_photos WHERE id = $1", [photoId]);
+      const row = selected.rows[0];
+      if (!row) { await client.query("ROLLBACK"); return null; }
+      const sessionId = String(row.session_id);
+      const session = await client.query("SELECT id FROM catch_sessions WHERE id = $1 FOR UPDATE", [sessionId]);
+      if (!session.rows[0]) { await client.query("ROLLBACK"); return null; }
+      const photos = await client.query("SELECT id FROM catch_photos WHERE session_id = $1 ORDER BY position", [sessionId]);
+      if (!photos.rows.some((item) => String(item.id) === photoId)) { await client.query("ROLLBACK"); return null; }
+      const ordered = [photoId, ...photos.rows.map((item) => String(item.id)).filter((id) => id !== photoId)];
+      await this.reorderPhotos(client, sessionId, ordered);
+      await client.query("COMMIT");
+      return sessionId;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async deletePhoto(photoId: string): Promise<{ deleted: boolean; sessionId: string | null; reason?: "last" }> {
+    const client = await this.db.connect();
+    try {
+      await client.query("BEGIN");
+      const selected = await client.query("SELECT session_id FROM catch_photos WHERE id = $1", [photoId]);
+      const row = selected.rows[0];
+      if (!row) { await client.query("ROLLBACK"); return { deleted: false, sessionId: null }; }
+      const sessionId = String(row.session_id);
+      const session = await client.query("SELECT id FROM catch_sessions WHERE id = $1 FOR UPDATE", [sessionId]);
+      if (!session.rows[0]) { await client.query("ROLLBACK"); return { deleted: false, sessionId: null }; }
+      const photos = await client.query("SELECT id FROM catch_photos WHERE session_id = $1 ORDER BY position", [sessionId]);
+      if (!photos.rows.some((item) => String(item.id) === photoId)) { await client.query("ROLLBACK"); return { deleted: false, sessionId: null }; }
+      if (photos.rows.length <= 1) { await client.query("ROLLBACK"); return { deleted: false, sessionId, reason: "last" }; }
+      await client.query("DELETE FROM catch_photos WHERE id = $1", [photoId]);
+      const remaining = photos.rows.map((item) => String(item.id)).filter((id) => id !== photoId);
+      await this.reorderPhotos(client, sessionId, remaining);
+      await client.query("COMMIT");
+      return { deleted: true, sessionId };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async listRecords(): Promise<RecordRow[]> {

@@ -56,6 +56,29 @@ export interface DraftRecord {
   data: CatchDraft;
 }
 
+export type ManagementStep =
+  | "session_date"
+  | "session_location"
+  | "session_waterbody"
+  | "fish_species"
+  | "fish_weight"
+  | "fish_length"
+  | "fish_angler"
+  | "photo_add";
+
+export interface ManagementDraftData {
+  latitude?: number;
+  longitude?: number;
+}
+
+export interface ManagementDraft {
+  userId: number;
+  step: ManagementStep;
+  sessionId: string;
+  fishId: string | null;
+  data: ManagementDraftData;
+}
+
 export interface AnglerOption {
   id: number;
   displayName: string;
@@ -64,6 +87,7 @@ export interface AnglerOption {
 
 export interface CatchPhoto {
   id: string;
+  sessionId: string;
   telegramFileId: string;
   telegramFileUniqueId: string;
   position: number;
