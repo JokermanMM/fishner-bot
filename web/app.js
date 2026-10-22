@@ -27,6 +27,7 @@
 
   const elements = {
     status: document.querySelector("#status-card"), welcome: document.querySelector("#welcome"),
+    seasonLabel: document.querySelector("#season-label"),
     heroStats: document.querySelector("#hero-stats"), catchGrid: document.querySelector("#catch-grid"),
     galleryCount: document.querySelector("#gallery-count"), speciesFilter: document.querySelector("#species-filter"),
     anglerFilter: document.querySelector("#angler-filter"), mapCount: document.querySelector("#map-count"),
@@ -34,6 +35,7 @@
     calendarGrid: document.querySelector("#calendar-grid"), dayList: document.querySelector("#day-list"),
     recordHero: document.querySelector("#record-hero"), anglerBars: document.querySelector("#angler-bars"),
     speciesBars: document.querySelector("#species-bars"), recordsList: document.querySelector("#records-list"),
+    clubHighlights: document.querySelector("#club-highlights"), highlightGrid: document.querySelector("#highlight-grid"),
     dialog: document.querySelector("#catch-dialog"), dialogMedia: document.querySelector("#dialog-media"),
     dialogBody: document.querySelector("#dialog-body"), emptyTemplate: document.querySelector("#empty-template"),
   };
@@ -93,7 +95,7 @@
   function setupTelegram() {
     if (!telegram) return;
     telegram.ready(); telegram.expand();
-    telegram.setHeaderColor?.("#071d2a"); telegram.setBackgroundColor?.("#061b27");
+    telegram.setHeaderColor?.("#f4f0e4"); telegram.setBackgroundColor?.("#f4f0e4");
   }
 
   async function api(path, options = {}) {
@@ -116,11 +118,34 @@
     const fishes = allFish();
     const totalWeight = fishes.reduce((sum, item) => sum + item.weightGrams, 0);
     const species = new Set(fishes.map((item) => item.speciesName.toLocaleLowerCase("ru-RU")));
-    elements.welcome.textContent = state.viewer?.firstName ? `${state.viewer.firstName}, вот что поймала наша компания` : "Общий дневник друзей";
+    const seasonYear = state.sessions[0]?.caughtOn?.slice(0, 4) ?? String(new Date().getFullYear());
+    elements.seasonLabel.textContent = `Сезон ${seasonYear}`;
+    elements.welcome.textContent = state.viewer?.firstName ? `${state.viewer.firstName}, добро пожаловать к нашей истории` : "Общий дневник друзей";
     elements.heroStats.innerHTML = `
       <div><strong>${fishes.length}</strong><span>${plural(fishes.length, ["рыба", "рыбы", "рыб"])}</span></div>
       <div><strong>${formatWeight(totalWeight)}</strong><span>общий вес</span></div>
       <div><strong>${species.size}</strong><span>${plural(species.size, ["вид", "вида", "видов"])}</span></div>`;
+    renderHighlights(fishes, species.size);
+  }
+
+  function renderHighlights(fishes, speciesCount) {
+    if (!fishes.length) { elements.clubHighlights.hidden = true; return; }
+    const biggest = [...fishes].sort((left, right) => right.weightGrams - left.weightGrams)[0];
+    const anglers = new Set(fishes.map((fish) => fish.ownerName));
+    elements.clubHighlights.hidden = false;
+    elements.highlightGrid.innerHTML = `
+      <article class="highlight-card highlight-card--gold">
+        <div class="highlight-card__medal">★</div>
+        <small>Самая крупная</small>
+        <strong>${escapeHtml(biggest.speciesName)} · ${formatWeight(biggest.weightGrams)}</strong>
+        <span>Поймал: ${escapeHtml(biggest.ownerName)}</span>
+      </article>
+      <article class="highlight-card highlight-card--green">
+        <div class="highlight-card__medal">❖</div>
+        <small>Наше разнообразие</small>
+        <strong>${speciesCount} ${plural(speciesCount, ["вид", "вида", "видов"])}</strong>
+        <span>${anglers.size} ${plural(anglers.size, ["рыбак", "рыбака", "рыбаков"])} в дневнике</span>
+      </article>`;
   }
 
   function fillFilters() {
