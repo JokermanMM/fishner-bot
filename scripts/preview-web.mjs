@@ -16,7 +16,7 @@ createServer(async (request, response) => {
   const relativePath = url.pathname === "/" || url.pathname === "/app" || url.pathname === "/app/"
     ? "index.html"
     : url.pathname.replace(/^\/app\//u, "");
-  if (!/^(index\.html|styles\.css|app\.js|vendor\/leaflet-1\.9\.4\.(?:css|js)|vendor\/images\/[a-z0-9@.-]+)$/iu.test(relativePath)) {
+  if (!/^(index\.html|styles\.css|app\.js|assets\/[a-z0-9@._-]+\.(?:jpg|jpeg|png|webp)|vendor\/leaflet-1\.9\.4\.(?:css|js)|vendor\/images\/[a-z0-9@.-]+)$/iu.test(relativePath)) {
     response.writeHead(404).end();
     return;
   }

@@ -26,9 +26,10 @@
   };
 
   const elements = {
-    status: document.querySelector("#status-card"), welcome: document.querySelector("#welcome"),
+    status: document.querySelector("#status-card"),
     seasonLabel: document.querySelector("#season-label"),
-    heroStats: document.querySelector("#hero-stats"), catchGrid: document.querySelector("#catch-grid"),
+    seasonProgress: document.querySelector("#season-progress"), seasonSummary: document.querySelector("#season-summary"),
+    catchGrid: document.querySelector("#catch-grid"),
     galleryCount: document.querySelector("#gallery-count"), speciesFilter: document.querySelector("#species-filter"),
     anglerFilter: document.querySelector("#angler-filter"), mapCount: document.querySelector("#map-count"),
     mapEmpty: document.querySelector("#map-empty"), calendarTitle: document.querySelector("#calendar-title"),
@@ -67,7 +68,6 @@
   }
 
   function dateValue(date) { return new Date(`${date.slice(0, 10)}T12:00:00.000Z`); }
-  function shortDate(date) { return new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short", timeZone: "UTC" }).format(dateValue(date)); }
   function longDate(date) { return new Intl.DateTimeFormat("ru-RU", { dateStyle: "long", timeZone: "UTC" }).format(dateValue(date)); }
 
   function plural(number, forms) {
@@ -118,13 +118,13 @@
     const fishes = allFish();
     const totalWeight = fishes.reduce((sum, item) => sum + item.weightGrams, 0);
     const species = new Set(fishes.map((item) => item.speciesName.toLocaleLowerCase("ru-RU")));
+    const biggestWeight = fishes.reduce((maximum, item) => Math.max(maximum, item.weightGrams), 0);
+    const nextRecord = biggestWeight ? (Math.floor(biggestWeight / 1000) + 1) * 1000 : 1000;
+    const progress = biggestWeight ? Math.min(96, Math.max(12, (biggestWeight / nextRecord) * 100)) : 8;
     const seasonYear = state.sessions[0]?.caughtOn?.slice(0, 4) ?? String(new Date().getFullYear());
     elements.seasonLabel.textContent = `Сезон ${seasonYear}`;
-    elements.welcome.textContent = state.viewer?.firstName ? `${state.viewer.firstName}, добро пожаловать к нашей истории` : "Общий дневник друзей";
-    elements.heroStats.innerHTML = `
-      <div><strong>${fishes.length}</strong><span>${plural(fishes.length, ["рыба", "рыбы", "рыб"])}</span></div>
-      <div><strong>${formatWeight(totalWeight)}</strong><span>общий вес</span></div>
-      <div><strong>${species.size}</strong><span>${plural(species.size, ["вид", "вида", "видов"])}</span></div>`;
+    elements.seasonProgress.style.width = `${progress}%`;
+    elements.seasonSummary.textContent = `${fishes.length} ${plural(fishes.length, ["рыба", "рыбы", "рыб"])} · ${species.size} ${plural(species.size, ["вид", "вида", "видов"])} · ${formatWeight(totalWeight)}`;
     renderHighlights(fishes, species.size);
   }
 
@@ -132,20 +132,21 @@
     if (!fishes.length) { elements.clubHighlights.hidden = true; return; }
     const biggest = [...fishes].sort((left, right) => right.weightGrams - left.weightGrams)[0];
     const anglers = new Set(fishes.map((fish) => fish.ownerName));
+    const newest = fishes[0];
     elements.clubHighlights.hidden = false;
     elements.highlightGrid.innerHTML = `
       <article class="highlight-card highlight-card--gold">
+        <div class="highlight-card__media" data-highlight="biggest"></div>
         <div class="highlight-card__medal">★</div>
-        <small>Самая крупная</small>
-        <strong>${escapeHtml(biggest.speciesName)} · ${formatWeight(biggest.weightGrams)}</strong>
-        <span>Поймал: ${escapeHtml(biggest.ownerName)}</span>
+        <div class="highlight-card__caption"><strong>Самая крупная</strong><span>${escapeHtml(biggest.speciesName)} · ${formatWeight(biggest.weightGrams)}</span></div>
       </article>
       <article class="highlight-card highlight-card--green">
+        <div class="highlight-card__media" data-highlight="newest"></div>
         <div class="highlight-card__medal">❖</div>
-        <small>Наше разнообразие</small>
-        <strong>${speciesCount} ${plural(speciesCount, ["вид", "вида", "видов"])}</strong>
-        <span>${anglers.size} ${plural(anglers.size, ["рыбак", "рыбака", "рыбаков"])} в дневнике</span>
+        <div class="highlight-card__caption"><strong>Наше разнообразие</strong><span>${speciesCount} ${plural(speciesCount, ["вид", "вида", "видов"])} · ${anglers.size} ${plural(anglers.size, ["рыбак", "рыбака", "рыбаков"])}</span></div>
       </article>`;
+    if (biggest.session.photos[0]) void attachPhoto(elements.highlightGrid.querySelector('[data-highlight="biggest"]'), biggest.session.photos[0], biggest.speciesName);
+    if (newest.session.photos[0]) void attachPhoto(elements.highlightGrid.querySelector('[data-highlight="newest"]'), newest.session.photos[0], newest.speciesName);
   }
 
   function fillFilters() {
@@ -176,21 +177,25 @@
 
   function renderGallery() {
     mediaObserver?.disconnect(); elements.catchGrid.replaceChildren();
-    elements.galleryCount.textContent = String(state.filtered.length);
+    elements.galleryCount.textContent = `Все · ${state.filtered.length}`;
     if (!state.filtered.length) { elements.catchGrid.append(emptyState()); return; }
+    const recordFish = [...allFish()].sort((left, right) => right.weightGrams - left.weightGrams)[0];
     for (const session of state.filtered) {
       const totalWeight = session.fishes.reduce((sum, fish) => sum + fish.weightGrams, 0);
+      const singleFish = session.fishes.length === 1 ? session.fishes[0] : null;
+      const cardTitle = singleFish ? `${singleFish.speciesName} · ${formatWeight(singleFish.weightGrams)}` : fishSummary(session);
+      const cardResult = singleFish ? (singleFish.lengthMm ? formatLength(singleFish.lengthMm) : session.waterbody ?? "Место не указано") : `${session.fishes.length} ${plural(session.fishes.length, ["рыба", "рыбы", "рыб"])} · ${formatWeight(totalWeight)}`;
+      const isRecord = session.fishes.some((fish) => fish.id === recordFish?.id);
       const card = document.createElement("button");
       card.type = "button"; card.className = "catch-card";
       card.innerHTML = `
         <div class="catch-card__media" data-media-for="${session.id}">
-          <span class="catch-card__badge">${session.photos.length > 1 ? `📷 ${session.photos.length}` : escapeHtml(anglerSummary(session))}</span>
-          ${session.photos.length > 1 ? `<span class="catch-card__angler">${escapeHtml(anglerSummary(session))}</span>` : ""}
+          <span class="catch-card__badge">${isRecord ? "★" : session.photos.length > 1 ? `📷 ${session.photos.length}` : "❧"}</span>
         </div>
         <div class="catch-card__body">
-          <h3>${escapeHtml(fishSummary(session))}</h3>
-          <div class="catch-card__weight">${session.fishes.length} ${plural(session.fishes.length, ["рыба", "рыбы", "рыб"])} · ${formatWeight(totalWeight)}</div>
-          <div class="catch-card__meta"><span>${escapeHtml(session.waterbody ?? "Место не указано")}</span><span>${shortDate(session.caughtOn)}</span></div>
+          <h3>${escapeHtml(cardTitle)}</h3>
+          <div class="catch-card__angler-row"><span>${escapeHtml(anglerSummary(session).slice(0, 1))}</span><strong>Поймал: ${escapeHtml(anglerSummary(session))}</strong></div>
+          <div class="catch-card__meta"><span>${escapeHtml(cardResult)}</span><span>${escapeHtml(session.waterbody ?? "Место не указано")}</span></div>
         </div>`;
       card.addEventListener("click", () => openSession(session));
       elements.catchGrid.append(card);
