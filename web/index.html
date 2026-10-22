@@ -20,15 +20,11 @@
       <header class="hero">
         <div class="hero__title-row">
           <div class="brand-mark" aria-hidden="true">
-            <svg viewBox="0 0 100 100" role="presentation">
-              <path class="brand-mark__rod" d="M24 72 70 26M30 25l43 47"/>
-              <path class="brand-mark__fish" d="M29 47c12-12 31-11 42 1-11 13-30 14-42 2l-11 8 3-12-3-11 11 7Z"/>
-              <circle cx="59" cy="45" r="2.2"/>
-            </svg>
+            <img src="/app/assets/fishner-crest.png" alt="">
             <strong>Fishner</strong><small>Private club</small>
           </div>
           <div>
-            <h1>Дневник<br>нашей компании</h1>
+            <h1>Наш<br>рыболовный<br>клуб</h1>
             <p id="welcome">Рыбалка · люди · больше чем увлечение</p>
           </div>
         </div>
@@ -43,12 +39,14 @@
           </div>
           <div class="season-card__content">
             <div class="season-card__heading"><span id="season-label">Сезон</span></div>
-            <div class="season-progress" aria-hidden="true"><span id="season-progress"></span></div>
-            <div class="season-card__footer">
-              <strong>🏆 До нового рекорда</strong>
-              <small id="season-summary" aria-live="polite">Загружаем итоги сезона</small>
+            <div class="season-totals" aria-live="polite">
+              <span>🐟 <b id="season-fish-count">—</b> рыб</span>
+              <i></i>
+              <span>🏆 <b id="season-record-count">—</b> рекорда</span>
             </div>
           </div>
+          <div class="season-card__motto">Больше<br>рыбы<br>ярче<br>историй</div>
+          <div class="season-card__arrow" aria-hidden="true">›</div>
         </div>
       </header>
 
@@ -61,10 +59,10 @@
       </section>
 
       <nav class="tabs" aria-label="Разделы дневника">
-        <button class="tab is-active" data-view="gallery" type="button"><span>🐟</span>Уловы</button>
-        <button class="tab" data-view="map" type="button"><span>⌖</span>Карта</button>
-        <button class="tab" data-view="calendar" type="button"><span>▦</span>Календарь</button>
-        <button class="tab" data-view="stats" type="button"><span>⌁</span>Итоги</button>
+        <button class="tab is-active" data-view="gallery" type="button"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M3 16c6-7 13-9 21-4l5-4-1 6 1 6-5-4c-8 5-15 3-21-4Zm8-1h.01"/></svg>Уловы</button>
+        <button class="tab" data-view="map" type="button"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 29S6 20 6 12a10 10 0 0 1 20 0c0 8-10 17-10 17Z"/><circle cx="16" cy="12" r="3.5"/></svg>Карта</button>
+        <button class="tab" data-view="calendar" type="button"><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="7" width="24" height="21" rx="3"/><path d="M10 3v8M22 3v8M4 13h24M10 18h2M16 18h2M22 18h2M10 23h2M16 23h2M22 23h2"/></svg>Календарь</button>
+        <button class="tab" data-view="stats" type="button"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 27V17h5v10H5Zm9 0V10h5v17h-5Zm9 0V4h5v23h-5Z"/></svg>Итоги</button>
       </nav>
 
       <section class="view is-active" id="view-gallery" data-view-panel="gallery">
@@ -78,7 +76,7 @@
         </div>
         <div class="catch-grid" id="catch-grid"></div>
         <section class="club-highlights" id="club-highlights" hidden>
-          <div class="club-highlights__heading"><span>Клубные достижения</span><small>По текущим уловам</small></div>
+          <div class="club-highlights__heading"><span>Наши достижения</span><small>Общий сезон</small></div>
           <div class="highlight-grid" id="highlight-grid"></div>
         </section>
       </section>

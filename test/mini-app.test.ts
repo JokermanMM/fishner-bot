@@ -37,10 +37,19 @@ test("Mini App отдаёт интерфейс, но закрывает API бе
   assert.equal(await handler.handle(
     { method: "HEAD", headers: {} } as IncomingMessage,
     designAsset.response,
-    new URL("https://fishner-bot.onrender.com/app/assets/club-sunrise.jpg"),
+    new URL("https://fishner-bot.onrender.com/app/assets/club-friends-hero.jpg"),
   ), true);
   assert.equal(designAsset.result.status, 200);
   assert.equal(designAsset.result.headers["content-type"], "image/jpeg");
+
+  const crestAsset = fakeResponse();
+  assert.equal(await handler.handle(
+    { method: "HEAD", headers: {} } as IncomingMessage,
+    crestAsset.response,
+    new URL("https://fishner-bot.onrender.com/app/assets/fishner-crest.png"),
+  ), true);
+  assert.equal(crestAsset.result.status, 200);
+  assert.equal(crestAsset.result.headers["content-type"], "image/png");
 
   const api = fakeResponse();
   assert.equal(await handler.handle(

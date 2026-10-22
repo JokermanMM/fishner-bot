@@ -28,7 +28,7 @@
   const elements = {
     status: document.querySelector("#status-card"),
     seasonLabel: document.querySelector("#season-label"),
-    seasonProgress: document.querySelector("#season-progress"), seasonSummary: document.querySelector("#season-summary"),
+    seasonFishCount: document.querySelector("#season-fish-count"), seasonRecordCount: document.querySelector("#season-record-count"),
     catchGrid: document.querySelector("#catch-grid"),
     galleryCount: document.querySelector("#gallery-count"), speciesFilter: document.querySelector("#species-filter"),
     anglerFilter: document.querySelector("#angler-filter"), mapCount: document.querySelector("#map-count"),
@@ -116,37 +116,24 @@
 
   function renderHero() {
     const fishes = allFish();
-    const totalWeight = fishes.reduce((sum, item) => sum + item.weightGrams, 0);
     const species = new Set(fishes.map((item) => item.speciesName.toLocaleLowerCase("ru-RU")));
-    const biggestWeight = fishes.reduce((maximum, item) => Math.max(maximum, item.weightGrams), 0);
-    const nextRecord = biggestWeight ? (Math.floor(biggestWeight / 1000) + 1) * 1000 : 1000;
-    const progress = biggestWeight ? Math.min(96, Math.max(12, (biggestWeight / nextRecord) * 100)) : 8;
     const seasonYear = state.sessions[0]?.caughtOn?.slice(0, 4) ?? String(new Date().getFullYear());
     elements.seasonLabel.textContent = `Сезон ${seasonYear}`;
-    elements.seasonProgress.style.width = `${progress}%`;
-    elements.seasonSummary.textContent = `${fishes.length} ${plural(fishes.length, ["рыба", "рыбы", "рыб"])} · ${species.size} ${plural(species.size, ["вид", "вида", "видов"])} · ${formatWeight(totalWeight)}`;
+    elements.seasonFishCount.textContent = String(fishes.length);
+    elements.seasonRecordCount.textContent = String(species.size);
     renderHighlights(fishes, species.size);
   }
 
   function renderHighlights(fishes, speciesCount) {
     if (!fishes.length) { elements.clubHighlights.hidden = true; return; }
-    const biggest = [...fishes].sort((left, right) => right.weightGrams - left.weightGrams)[0];
     const anglers = new Set(fishes.map((fish) => fish.ownerName));
-    const newest = fishes[0];
+    const catchDays = new Set(state.sessions.map((session) => session.caughtOn));
     elements.clubHighlights.hidden = false;
     elements.highlightGrid.innerHTML = `
-      <article class="highlight-card highlight-card--gold">
-        <div class="highlight-card__media" data-highlight="biggest"></div>
-        <div class="highlight-card__medal">★</div>
-        <div class="highlight-card__caption"><strong>Самая крупная</strong><span>${escapeHtml(biggest.speciesName)} · ${formatWeight(biggest.weightGrams)}</span></div>
-      </article>
-      <article class="highlight-card highlight-card--green">
-        <div class="highlight-card__media" data-highlight="newest"></div>
-        <div class="highlight-card__medal">❖</div>
-        <div class="highlight-card__caption"><strong>Наше разнообразие</strong><span>${speciesCount} ${plural(speciesCount, ["вид", "вида", "видов"])} · ${anglers.size} ${plural(anglers.size, ["рыбак", "рыбака", "рыбаков"])}</span></div>
-      </article>`;
-    if (biggest.session.photos[0]) void attachPhoto(elements.highlightGrid.querySelector('[data-highlight="biggest"]'), biggest.session.photos[0], biggest.speciesName);
-    if (newest.session.photos[0]) void attachPhoto(elements.highlightGrid.querySelector('[data-highlight="newest"]'), newest.session.photos[0], newest.speciesName);
+      <article class="highlight-stat"><span>🏆</span><strong>${speciesCount}</strong><small>${plural(speciesCount, ["рекорд", "рекорда", "рекордов"])}</small></article>
+      <article class="highlight-stat"><span>🐟</span><strong>${fishes.length}</strong><small>${plural(fishes.length, ["рыба", "рыбы", "рыб"])}</small></article>
+      <article class="highlight-stat"><span>♟</span><strong>${anglers.size}</strong><small>${plural(anglers.size, ["друг", "друга", "друзей"])} в клубе</small></article>
+      <article class="highlight-stat"><span>▣</span><strong>${catchDays.size}</strong><small>${plural(catchDays.size, ["день", "дня", "дней"])} с уловом</small></article>`;
   }
 
   function fillFilters() {
