@@ -11,6 +11,8 @@ const assets = new Map([
   ["/app/", { path: "index.html", type: "text/html; charset=utf-8" }],
   ["/app/app.js", { path: "app.js", type: "text/javascript; charset=utf-8" }],
   ["/app/styles.css", { path: "styles.css", type: "text/css; charset=utf-8" }],
+  ["/app/assets/club-sunrise.jpg", { path: "assets/club-sunrise.jpg", type: "image/jpeg" }],
+  ["/app/assets/season-lake.jpg", { path: "assets/season-lake.jpg", type: "image/jpeg" }],
   ["/app/vendor/leaflet-1.9.4.js", { path: "vendor/leaflet-1.9.4.js", type: "text/javascript; charset=utf-8" }],
   ["/app/vendor/leaflet-1.9.4.css", { path: "vendor/leaflet-1.9.4.css", type: "text/css; charset=utf-8" }],
   ["/app/vendor/images/layers.png", { path: "vendor/images/layers.png", type: "image/png" }],

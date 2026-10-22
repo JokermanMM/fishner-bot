@@ -33,6 +33,15 @@ test("Mini App отдаёт интерфейс, но закрывает API бе
   assert.equal(page.result.status, 200);
   assert.match(page.result.headers["content-security-policy"] ?? "", /frame-ancestors https:\/\/web\.telegram\.org/u);
 
+  const designAsset = fakeResponse();
+  assert.equal(await handler.handle(
+    { method: "HEAD", headers: {} } as IncomingMessage,
+    designAsset.response,
+    new URL("https://fishner-bot.onrender.com/app/assets/club-sunrise.jpg"),
+  ), true);
+  assert.equal(designAsset.result.status, 200);
+  assert.equal(designAsset.result.headers["content-type"], "image/jpeg");
+
   const api = fakeResponse();
   assert.equal(await handler.handle(
     { method: "POST", headers: {} } as IncomingMessage,
